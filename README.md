@@ -14,7 +14,7 @@ Chatbot especializado en análisis de datos de puntos de venta (PDVs) usando Ope
 
 1. **Clonar/descargar el proyecto**
 ```bash
-cd chatbot_20250820
+cd cb_20250820
 ```
 
 2. **Instalar dependencias**
