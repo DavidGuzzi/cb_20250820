@@ -1,14 +1,18 @@
 """
 Flask Application Factory
 """
-from flask import Flask
+from flask import Flask, request, g
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
+from app.utils.logger import setup_logging, log_api_call
 
 def create_app():
     """Create and configure Flask application"""
     load_dotenv()
+    
+    # Setup logging
+    logger = setup_logging()
     
     app = Flask(__name__)
     
@@ -22,6 +26,18 @@ def create_app():
     # Enable CORS for all domains
     CORS(app, origins=['http://localhost:5173', 'http://127.0.0.1:5173'])
     
+    # Request logging middleware
+    @app.before_request
+    def log_request_info():
+        """Log incoming requests"""
+        if request.path.startswith('/api/'):
+            log_api_call(
+                endpoint=request.path,
+                method=request.method,
+                remote_addr=request.remote_addr,
+                user_agent=request.headers.get('User-Agent', '')
+            )
+    
     # Register blueprints
     from app.routes.health import health_bp
     from app.routes.chat import chat_bp
@@ -30,5 +46,7 @@ def create_app():
     app.register_blueprint(health_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(analytics_bp)
+    
+    logger.info("Flask application created successfully")
     
     return app

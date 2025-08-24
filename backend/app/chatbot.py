@@ -1,8 +1,8 @@
 from openai import OpenAI
-from config import Config
-from conversation_memory import ConversationMemory
-from data_store import DataStore
-from sql_engine import SQLEngine
+from app.config import Config
+from app.conversation_memory import ConversationMemory
+from app.data_store import DataStore
+from app.sql_engine import SQLEngine
 import json
 import re
 

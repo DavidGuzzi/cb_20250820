@@ -4,7 +4,7 @@ Motor SQL para análisis text-to-SQL
 
 import sqlite3
 import pandas as pd
-from data_store import DataStore
+from app.data_store import DataStore
 
 class SQLEngine:
     def __init__(self):
