@@ -62,21 +62,28 @@ export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
   useEffect(() => {
     const initializeChat = async () => {
       try {
+        console.log('🔄 Initializing chat for user:', userEmail);
         setIsLoading(true);
         
         // Check backend health
+        console.log('🏥 Checking backend health...');
         const health = await apiService.healthCheck();
+        console.log('🏥 Health response:', health);
+        
         if (!health.chatbot_ready) {
           throw new Error('Chatbot is not ready');
         }
 
         // Only start new session if we don't have a persisted one
         if (!sessionId) {
+          console.log('🆕 Creating new chat session...');
           const session = await apiService.startChatSession(userEmail);
+          console.log('🆕 Session created:', session);
           setSessionId(session.session_id);
 
           // Add welcome message only if we don't have persisted messages
           if (messages.length === 0) {
+            console.log('👋 Adding welcome message');
             const welcomeMessage: ChatMessage = {
               id: '1',
               text: session.welcome_message,
@@ -85,6 +92,8 @@ export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
             };
             setMessages([welcomeMessage]);
           }
+        } else {
+          console.log('♻️ Using existing session:', sessionId);
         }
 
       } catch (error) {
@@ -103,7 +112,11 @@ export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
 
   // Send message function
   const sendMessage = useCallback(async (messageText: string) => {
+    console.log('📤 Sending message:', messageText);
+    console.log('📤 Session ID:', sessionId);
+    
     if (!sessionId || !messageText.trim()) {
+      console.log('❌ Cannot send: no sessionId or empty message');
       return;
     }
 

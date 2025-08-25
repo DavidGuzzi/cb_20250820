@@ -5,7 +5,7 @@ import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { 
   Send, 
   TrendingUp, 
@@ -18,7 +18,8 @@ import {
   Zap,
   AlertCircle 
 } from 'lucide-react';
-import { useChat } from '../hooks/useChat';
+import { useChatContext } from '../contexts/ChatContext';
+import { apiService } from '../services/api';
 
 interface ResultsProps {
   userEmail: string;
@@ -27,15 +28,17 @@ interface ResultsProps {
 
 export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
   const [inputMessage, setInputMessage] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  
+  // Estados para el gráfico dinámico
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [chartLoading, setChartLoading] = useState(true);
+  const [chartType, setChartType] = useState<'region' | 'city'>('region');
+  const [totalRevenue, setTotalRevenue] = useState(0);
 
-  // Memoize onError callback to prevent unnecessary re-renders
-  const handleError = useCallback((err: string) => {
-    setError(err);
-  }, []);
-
-  // Use our custom chat hook
+  // Use chat context instead of direct hook
   const {
     messages,
     isLoading,
@@ -43,23 +46,120 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
     sessionId,
     sendMessage,
     analytics
-  } = useChat({
-    userEmail,
-    onError: handleError
-  });
+  } = useChatContext();
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const scrollToBottom = () => {
+      if (scrollAreaRef.current) {
+        // Find the scroll viewport within our ScrollArea component
+        const scrollViewport = scrollAreaRef.current.querySelector('[data-slot="scroll-area-viewport"]');
+        if (scrollViewport) {
+          // Use a longer timeout to ensure content has been rendered
+          setTimeout(() => {
+            scrollViewport.scrollTo({
+              top: scrollViewport.scrollHeight,
+              behavior: 'smooth'
+            });
+          }, 200);
+        } else {
+          // Fallback: try with messagesEndRef
+          if (messagesEndRef.current) {
+            setTimeout(() => {
+              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 200);
+          }
+        }
+      }
+    };
+    
+    // Scroll on new messages or when typing indicator changes
+    if (messages.length > 0 || isTyping) {
+      scrollToBottom();
+    }
+  }, [messages.length, isTyping]); // Watch messages.length instead of messages array to avoid excessive re-renders
+
+  // Cargar datos del gráfico
+  useEffect(() => {
+    const loadChartData = async () => {
+      try {
+        setChartLoading(true);
+        const response = chartType === 'region' 
+          ? await apiService.getRevenueByRegion()
+          : await apiService.getRevenueByCity();
+        
+        if (response.success) {
+          setChartData(response.data);
+          setTotalRevenue(response.total_revenue);
+        }
+      } catch (error) {
+        console.error('Error loading chart data:', error);
+      } finally {
+        setChartLoading(false);
+      }
+    };
+
+    loadChartData();
+  }, [chartType]);
+
+  // Mantener el input enfocado
+  useEffect(() => {
+    const focusInput = () => {
+      if (inputRef.current && !isTyping && !document.activeElement?.closest('.scroll-area')) {
+        inputRef.current.focus();
+      }
+    };
+
+    // Enfocar con un delay más largo para asegurar que el DOM esté listo
+    const timer = setTimeout(focusInput, 300);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [isTyping, messages.length]);
+
+  // Enfocar cuando cambie el estado de typing
+  useEffect(() => {
+    if (!isTyping && inputRef.current) {
+      const timer = setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 500); // Delay mayor para después de que termine de escribir
+
+      return () => clearTimeout(timer);
+    }
+  }, [isTyping]);
+
+  // Enfocar al hacer click en cualquier parte del área de chat (excepto el scroll)
+  useEffect(() => {
+    const handleChatClick = (e: MouseEvent) => {
+      const target = e.target as Element;
+      if (target && !target.closest('input') && !target.closest('button') && inputRef.current) {
+        inputRef.current.focus();
+      }
+    };
+
+    document.addEventListener('click', handleChatClick);
+    return () => document.removeEventListener('click', handleChatClick);
+  }, []);
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isTyping) return;
     
-    setError(null);
     await sendMessage(inputMessage);
     setInputMessage('');
+    
+    // Enfocar explícitamente después de enviar
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 100);
   };
+
+  // Colores para el gráfico de torta
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
   const detailedData = [
     {
@@ -157,18 +257,6 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
         </div>
       </div>
 
-      {/* Error Display */}
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4 mx-6 mt-4">
-          <div className="flex">
-            <AlertCircle className="w-5 h-5 text-red-400" />
-            <div className="ml-3">
-              <p className="text-sm text-red-700">Error: {error}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Contenido principal horizontal */}
       <div className="flex-1 flex overflow-hidden">
         {/* Panel izquierdo - Resultados detallados */}
@@ -242,29 +330,83 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
               <TabsContent value="details" className="h-full overflow-y-auto">
                 <Card className="bg-white h-full">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-secondary">Análisis Comparativo Final</CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-secondary">Revenue por {chartType === 'region' ? 'Región' : 'Ciudad'}</CardTitle>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant={chartType === 'region' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setChartType('region')}
+                        >
+                          Por Región
+                        </Button>
+                        <Button
+                          variant={chartType === 'city' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setChartType('city')}
+                        >
+                          Por Ciudad
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-2">
+                      Total Revenue: ${totalRevenue.toLocaleString()} • Datos en tiempo real
+                    </div>
                   </CardHeader>
-                  <CardContent className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={detailedData[0].variants}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="name" tick={{fontSize: 12}} />
-                        <YAxis tick={{fontSize: 12}} />
-                        <Tooltip 
-                          formatter={(value, name) => {
-                            if (name === 'rate') return [`${value}%`, 'Conversión'];
-                            if (name === 'visitors') return [value.toLocaleString(), 'Visitantes'];
-                            return [value, name];
-                          }}
-                          contentStyle={{
-                            backgroundColor: 'white',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '8px'
-                          }}
-                        />
-                        <Bar dataKey="rate" fill="#ff6600" name="rate" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                  <CardContent className="h-96">
+                    {chartLoading ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-muted-foreground">Cargando datos...</div>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={chartData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percentage }) => `${name}: ${percentage}%`}
+                            outerRadius={120}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {chartData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value) => [`$${value.toLocaleString()}`, 'Revenue']}
+                            labelFormatter={(label) => `${label}`}
+                          />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    )}
+                    
+                    {/* Estadísticas adicionales */}
+                    {!chartLoading && chartData.length > 0 && (
+                      <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4 text-sm">
+                        {chartData.map((item, index) => (
+                          <div key={item.name} className="p-3 border rounded-lg">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                              ></div>
+                              <span className="font-medium">{item.name}</span>
+                            </div>
+                            <div className="space-y-1 text-muted-foreground">
+                              <div>Revenue: ${item.value.toLocaleString()}</div>
+                              <div>Visitantes: {item.visitantes.toLocaleString()}</div>
+                              <div>Conversiones: {item.conversiones.toLocaleString()}</div>
+                              <div>Tasa conversión: {item.conversion_rate}%</div>
+                              <div>PDVs: {item.pdv_count}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -321,8 +463,8 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
           </div>
 
           {/* Chat messages area */}
-          <ScrollArea className="flex-1 p-4">
-            <div className="space-y-4">
+          <ScrollArea ref={scrollAreaRef} className="flex-1" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+            <div className="p-4 space-y-4 min-h-full">
               {messages.map((message) => (
                 <div 
                   key={message.id} 
@@ -393,6 +535,7 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
           <div className="p-4 border-t border-border">
             <div className="flex space-x-2">
               <Input
+                ref={inputRef}
                 placeholder="Pregunta sobre los datos de tiendas, experimentos, conversiones..."
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
@@ -409,9 +552,6 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
                 <Send className="w-4 h-4" />
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Prueba: "¿Cuántas tiendas tenemos?", "¿Cuál es el mejor experimento?", "Muéstrame las regiones"
-            </p>
           </div>
         </div>
       </div>

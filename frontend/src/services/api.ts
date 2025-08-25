@@ -1,6 +1,10 @@
 // API service for communicating with the Flask backend
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+// Debug log to verify API URL
+console.log('🔗 API_BASE_URL:', API_BASE_URL);
+console.log('🔗 VITE_API_URL env:', import.meta.env.VITE_API_URL);
+
 export interface ChatMessage {
   id: string;
   text: string;
@@ -148,6 +152,46 @@ class ApiService {
     };
   }> {
     return this.fetchApi('/api/data/summary');
+  }
+
+  // Get revenue data by region
+  async getRevenueByRegion(): Promise<{
+    success: boolean;
+    data: Array<{
+      name: string;
+      value: number;
+      percentage: number;
+      visitantes: number;
+      conversiones: number;
+      pdv_count: number;
+      conversion_rate: number;
+    }>;
+    total_revenue: number;
+    summary: {
+      total_regions: number;
+      total_pdvs: number;
+      period_covered: string[];
+    };
+  }> {
+    return this.fetchApi('/api/analytics/revenue-by-region');
+  }
+
+  // Get revenue data by city
+  async getRevenueByCity(): Promise<{
+    success: boolean;
+    data: Array<{
+      name: string;
+      value: number;
+      percentage: number;
+      region: string;
+      visitantes: number;
+      conversiones: number;
+      pdv_count: number;
+      conversion_rate: number;
+    }>;
+    total_revenue: number;
+  }> {
+    return this.fetchApi('/api/analytics/revenue-by-city');
   }
 }
 

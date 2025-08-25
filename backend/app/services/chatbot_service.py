@@ -13,22 +13,17 @@ class ChatbotService:
     
     def __init__(self):
         self.chatbots: Dict[str, ABTestingChatbot] = {}
-        self.welcome_message = """¡Hola! 👋 Soy tu asistente especializado en análisis de datos de retail.
+        self.welcome_message = """¡Hola! 👋 Soy tu Asistente IA de Análisis de Datos.
 
-Tengo acceso a información detallada de 8 puntos de venta (PDVs) con datos de:
-• Revenue por mes y PDV
-• Visitantes y conversiones
-• Métricas por región y tipo de tienda
-• Datos de los últimos 3 meses (Nov 2024 - Ene 2025)
+🏪 Tengo acceso completo a 8 puntos de venta (PDVs) distribuidos en 6 ciudades argentinas con datos detallados de los últimos 3 meses:
+• Revenue y ingresos por período
+• Flujo de visitantes y patrones
+• Tasas de conversión y métricas de performance
 
-**Ejemplos de preguntas que puedes hacer:**
-• "¿Cuál es el PDV con mejor performance?"
-• "Compara los ingresos entre regiones"
-• "¿Cómo evolucionó el revenue de enero vs diciembre?"
-• "¿Qué tipo de tienda tiene mejor conversión?"
-• "Muéstrame el top 3 de PDVs por revenue"
+💡 Pregúntame cualquier cosa sobre tus datos, por ejemplo:
+"¿Cuántos PDVs tenemos?", "¿Cuál es el mejor PDV?", "Muéstrame el revenue por región"
 
-¡Pregúntame lo que necesites saber sobre los datos!"""
+🚀 ¡Estoy listo para ayudarte a descubrir insights valiosos!"""
     
     def get_chatbot(self, session_id: str) -> ABTestingChatbot:
         """Get or create chatbot instance for session"""
