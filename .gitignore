@@ -99,3 +99,5 @@ htmlcov/
 /.playwright-mcp
 /.playwright-mcp
 /.playwright-mcp
+.env.production
+uso.txt

@@ -12,21 +12,29 @@ This is a full-stack retail data analysis application consisting of:
 ## Common Commands
 
 ### Docker Development (Recommended)
+
+#### Local Development:
+```bash
+# Setup environment
+cp .env.local .env  # For local development
+
+# Start all services locally
+docker-compose -f docker-compose.local.yml up -d
+
+# View logs
+docker-compose -f docker-compose.local.yml logs -f
+
+# Stop services
+docker-compose -f docker-compose.local.yml down
+```
+
+#### Legacy Docker (still works):
 ```bash
 # Setup environment
 cp .env.example .env  # Add your OPENAI_API_KEY
 
 # Start all services
 docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
-
-# Rebuild after changes
-docker-compose build
 ```
 
 ### Local Development
@@ -135,10 +143,38 @@ docker-compose -f deploy/docker-compose.prod.yml up -d
 
 ## Environment Variables
 
-Required:
-- `OPENAI_API_KEY`: OpenAI API key for chatbot functionality
+### Local Development (.env.local):
+```bash
+FLASK_ENV=development
+OPENAI_API_KEY=your-openai-api-key
+SECRET_KEY=dev-secret-key-local
+LOG_LEVEL=DEBUG
+```
 
-Optional:
-- `FLASK_ENV`: development/production
-- `LOG_LEVEL`: INFO/DEBUG/WARNING
-- `SECRET_KEY`: Flask session secret (change in production)
+### Cloud Run Production:
+```bash
+FLASK_ENV=production
+OPENAI_API_KEY=your-openai-api-key  # Set via gcloud
+FRONTEND_URL=https://your-frontend-url.run.app
+SECRET_KEY=secure-production-key
+LOG_LEVEL=INFO
+PORT=8080
+```
+
+## Cloud Run Deployment
+
+### Quick Deploy:
+```bash
+./deploy-cloudrun.sh
+```
+
+### Manual Deploy:
+```bash
+# Backend
+gcloud builds submit ./backend --tag gcr.io/PROJECT_ID/retail-backend
+gcloud run deploy retail-backend --image gcr.io/PROJECT_ID/retail-backend --region us-central1
+
+# Frontend  
+gcloud builds submit ./frontend --tag gcr.io/PROJECT_ID/retail-frontend
+gcloud run deploy retail-frontend --image gcr.io/PROJECT_ID/retail-frontend --region us-central1
+```

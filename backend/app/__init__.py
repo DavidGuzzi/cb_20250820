@@ -23,8 +23,18 @@ def create_app():
         DEBUG=os.getenv('FLASK_ENV') == 'development'
     )
     
-    # Enable CORS for all domains
-    CORS(app, origins=['http://localhost:5173', 'http://127.0.0.1:5173'])
+    # Smart CORS configuration for local and cloud
+    env = os.getenv('FLASK_ENV', 'development')
+    if env == 'production':
+        # Cloud Run production
+        frontend_url = os.getenv('FRONTEND_URL', 'https://retail-frontend-945253268443.us-central1.run.app')
+        allowed_origins = [frontend_url]
+    else:
+        # Local development
+        allowed_origins = ['http://localhost:5173', 'http://127.0.0.1:5173']
+    
+    CORS(app, origins=allowed_origins)
+    logger.info(f"CORS enabled for: {allowed_origins}")
     
     # Request logging middleware
     @app.before_request
