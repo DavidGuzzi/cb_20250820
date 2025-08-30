@@ -69,13 +69,20 @@ export function Login({ onLogin }: LoginProps) {
           />
           
           {/* Powered by section - outside the login card */}
-          <div className="flex flex-col items-center mt-6 space-y-2">
-            <span className="text-sm text-white/80">Powered by</span>
-            <img 
-              src={poweredByImage} 
-              alt="Powered by" 
-              className="h-5 md:h-8 opacity-90 hover:opacity-100 transition-opacity"
-            />
+          <div className="flex flex-col items-center mt-8 space-y-3">
+            <span className="text-sm text-white/90 font-medium drop-shadow-lg">Powered by</span>
+            <a 
+              href="https://marketone.co/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-block"
+            >
+              <img 
+                src={poweredByImage} 
+                alt="Powered by" 
+                className="h-20 md:h-24 opacity-95 hover:opacity-100 transition-all duration-300 hover:scale-105 drop-shadow-xl hover:drop-shadow-2xl hover:brightness-110 hover:saturate-110 cursor-pointer"
+              />
+            </a>
           </div>
         </div>
       </div>
