@@ -1,18 +1,15 @@
 import { useState } from 'react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Label } from './ui/label';
-import { Alert, AlertDescription } from './ui/alert';
-import { Info, User, Lock } from 'lucide-react';
+import { LoginForm } from './LoginForm';
+import backgroundImage from '../assets/1a61d0a24f9ff5887c7d9855cad3a3449b0b5103.png';
+import logoImage1 from '../assets/6d3c78c720838cff63f1728bad0913fc7a31326b.png';
+import logoImage2 from '../assets/eeebd68b27ba4231462e7a839640963574037229.png';
+import poweredByImage from '../assets/8388e6abe7aa42dbcd9db7058b9d67171b1d8c24.png';
 
 interface LoginProps {
   onLogin: (email: string) => void;
 }
 
 export function Login({ onLogin }: LoginProps) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -23,8 +20,7 @@ export function Login({ onLogin }: LoginProps) {
     { email: 'analista@gatorade.com', password: 'testing456', role: 'Analista' }
   ];
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (email: string, password: string) => {
     setIsLoading(true);
     setError('');
 
@@ -41,148 +37,62 @@ export function Login({ onLogin }: LoginProps) {
     } else if (!email || !password) {
       setError('Por favor, ingresa email y contraseña');
     } else {
-      setError('Credenciales incorrectas. Usa las credenciales mostradas a la derecha.');
+      setError('Credenciales incorrectas. Usa las credenciales demo.');
     }
     setIsLoading(false);
   };
 
-  const fillDemoCredentials = (cred: { email: string; password: string; role: string }) => {
-    setEmail(cred.email);
-    setPassword(cred.password);
+  const handleFillDemo = (email: string, password: string) => {
     setError('');
   };
 
   return (
-    <div className="h-screen w-screen relative flex overflow-hidden">
-      {/* Fondo difuso con múltiples capas */}
-      <div className="absolute inset-0">
-        {/* Capa base con gradiente difuso */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-accent/15 to-secondary/25"></div>
-        
-        {/* Formas difusas flotantes */}
-        <div className="absolute top-10 left-20 w-96 h-96 bg-primary/10 rounded-full blur-3xl opacity-70"></div>
-        <div className="absolute bottom-20 right-32 w-80 h-80 bg-accent/15 rounded-full blur-3xl opacity-60"></div>
-        <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-secondary/8 rounded-full blur-2xl opacity-80"></div>
-        <div className="absolute bottom-10 left-10 w-48 h-48 bg-primary/12 rounded-full blur-2xl opacity-50"></div>
-        <div className="absolute top-32 right-20 w-56 h-56 bg-accent/10 rounded-full blur-3xl opacity-75"></div>
-        
-        {/* Capa de ruido/textura sutil */}
-        <div className="absolute inset-0 opacity-30 bg-gradient-to-r from-transparent via-white/5 to-transparent"></div>
-        <div className="absolute inset-0 opacity-20 bg-gradient-to-b from-transparent via-primary/5 to-transparent"></div>
+    <div className="min-h-screen w-full relative overflow-hidden">
+      {/* Background Image */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${backgroundImage})` }}
+      >
+        {/* Dark overlay for better text readability */}
+        <div className="absolute inset-0 bg-black/20"></div>
       </div>
-
-      {/* Panel izquierdo - Branding con backdrop blur */}
-      <div className="flex-1 relative flex items-center justify-center">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/30 via-accent/20 to-secondary/30 backdrop-blur-sm"></div>
-        <div className="relative z-10 text-center text-white space-y-6 px-8">
-          <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center mx-auto backdrop-blur-md border border-white/30">
-            <svg className="w-16 h-16 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
+      
+      {/* Content */}
+      <div className="relative z-10 min-h-screen flex items-center justify-end pr-2 md:pr-4 lg:pr-8 xl:pr-12">
+        <div className="w-full max-w-md mr-12 md:mr-16 lg:mr-20 xl:mr-24">
+          <LoginForm 
+            onLogin={handleLogin}
+            isLoading={isLoading}
+            error={error}
+            demoCredentials={demoCredentials}
+            onFillDemo={handleFillDemo}
+          />
+          
+          {/* Powered by section - outside the login card */}
+          <div className="flex flex-col items-center mt-6 space-y-2">
+            <span className="text-sm text-white/80">Powered by</span>
+            <img 
+              src={poweredByImage} 
+              alt="Powered by" 
+              className="h-5 md:h-8 opacity-90 hover:opacity-100 transition-opacity"
+            />
           </div>
-          <h1 className="text-4xl font-bold drop-shadow-lg">Gatorade</h1>
-          <h2 className="text-xl font-medium drop-shadow">AB Testing Platform</h2>
-          <p className="text-lg opacity-90 max-w-md drop-shadow">
-            Analiza, optimiza y maximiza el rendimiento de tus campañas con datos en tiempo real
-          </p>
         </div>
       </div>
-
-      {/* Panel central - Login Form con backdrop blur */}
-      <div className="w-96 relative flex items-center justify-center p-8">
-        <div className="absolute inset-0 bg-white/80 backdrop-blur-md"></div>
-        <div className="relative z-10 w-full max-w-sm space-y-6">
-          <div className="text-center space-y-2">
-            <h3 className="text-2xl font-semibold text-secondary">Iniciar Sesión</h3>
-            <p className="text-muted-foreground">Accede a tu panel de control</p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email" className="flex items-center text-secondary">
-                <User className="w-4 h-4 mr-2" />
-                Email
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="tu@gatorade.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="border-gray-300 focus:border-primary focus:ring-primary bg-white/90 backdrop-blur"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="password" className="flex items-center text-secondary">
-                <Lock className="w-4 h-4 mr-2" />
-                Contraseña
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="border-gray-300 focus:border-primary focus:ring-primary bg-white/90 backdrop-blur"
-              />
-            </div>
-
-            {error && (
-              <Alert className="bg-accent/10 border-accent/30 backdrop-blur">
-                <AlertDescription className="text-accent text-sm">{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <Button 
-              type="submit" 
-              className="w-full bg-primary hover:bg-primary/90 text-white h-11"
-              disabled={isLoading}
-            >
-              {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-            </Button>
-          </form>
-        </div>
-      </div>
-
-      {/* Panel derecho - Credenciales Demo con backdrop blur */}
-      <div className="w-80 relative p-8 flex items-center">
-        <div className="absolute inset-0 bg-secondary/90 backdrop-blur-md"></div>
-        <div className="relative z-10 w-full space-y-6 text-white">
-          <div className="text-center space-y-2">
-            <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center mx-auto">
-              <Info className="w-6 h-6 text-white" />
-            </div>
-            <h3 className="text-lg font-semibold">Credenciales Demo</h3>
-            <p className="text-sm text-gray-300">Haz clic para usar</p>
-          </div>
-
-          <div className="space-y-3">
-            {demoCredentials.map((cred, index) => (
-              <div 
-                key={index}
-                className="p-3 bg-white/10 rounded-lg cursor-pointer hover:bg-white/20 transition-all duration-200 border border-white/20 backdrop-blur"
-                onClick={() => fillDemoCredentials(cred)}
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-sm">{cred.role}</p>
-                    <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  </div>
-                  <p className="text-xs text-gray-300">{cred.email}</p>
-                  <p className="text-xs text-gray-400 font-mono">{cred.password}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="text-center">
-            <p className="text-xs text-gray-400">
-              💡 Selecciona cualquier credencial para acceder
-            </p>
-          </div>
+      
+      {/* Bottom Center Logos */}
+      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-20">
+        <div className="flex items-center gap-8">
+          <img 
+            src={logoImage1} 
+            alt="Logo 1" 
+            className="h-12 md:h-16 opacity-90 hover:opacity-100 transition-opacity"
+          />
+          <img 
+            src={logoImage2} 
+            alt="Logo 2" 
+            className="h-12 md:h-16 opacity-90 hover:opacity-100 transition-opacity"
+          />
         </div>
       </div>
     </div>
