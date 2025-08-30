@@ -80,7 +80,7 @@ export function Login({ onLogin }: LoginProps) {
               <img 
                 src={poweredByImage} 
                 alt="Powered by" 
-                className="h-20 md:h-24 opacity-95 hover:opacity-100 transition-all duration-300 hover:scale-105 drop-shadow-xl hover:drop-shadow-2xl hover:brightness-110 hover:saturate-110 cursor-pointer"
+                className="h-12 md:h-16 opacity-95 hover:opacity-100 transition-all duration-300 hover:scale-105 drop-shadow-xl hover:drop-shadow-2xl hover:brightness-110 hover:saturate-110 cursor-pointer"
               />
             </a>
           </div>
