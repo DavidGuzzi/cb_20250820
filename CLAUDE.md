@@ -103,6 +103,8 @@ npm run lint
 - **Custom hooks**: useChat for chat state management
 - **API Service**: Centralized API communication
 - **Local persistence**: localStorage for session continuity
+- **Theme System**: Dark/Light mode with ThemeProvider context
+- **Modern Dashboard**: Figma-based design with A/B testing analytics
 
 ### Data Layer
 - **8 PDVs** across 6 Argentine cities (Buenos Aires, Córdoba, Rosario, Mendoza, Tucumán, Santa Fe)
@@ -140,6 +142,9 @@ docker-compose -f deploy/docker-compose.prod.yml up -d
 - **Real-time Analytics**: System performance monitoring
 - **Containerized**: Docker for consistent deployment
 - **Health Monitoring**: Automated health checks and structured logging
+- **Modern Dashboard**: A/B Testing analytics with Figma-based design
+- **Dark/Light Theme**: Complete theme system with session isolation
+- **Responsive Design**: Mobile-friendly interface with adaptive layouts
 
 ## Environment Variables
 
