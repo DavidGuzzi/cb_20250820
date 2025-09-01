@@ -18,10 +18,9 @@ interface DashboardProps {
 export function Dashboard({ userEmail, onNavigateToResults, onLogout }: DashboardProps) {
   const { theme, toggleTheme } = useTheme();
   const [filters, setFilters] = useState({
-    tipologia: '',
+    tipologia: 'Super e Hiper', // Default tipologia
     palanca: '',
-    kpi: '',
-    periodo: ''
+    kpi: ''
   });
 
   return (
@@ -78,7 +77,7 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
       <main className="flex h-[calc(100vh-81px)]">
         {/* Left Sidebar */}
         <div className="w-72 border-r bg-card p-4 flex flex-col h-full">
-          <div className="mb-4">
+          <div className="mb-8">
             <h2 className="mb-3 text-foreground font-bold text-lg">Resumen General</h2>
             <SummaryCards />
           </div>

@@ -1,66 +1,128 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
-import { TrendingUp, TrendingDown, Target, Zap, Star } from 'lucide-react';
+import { TrendingUp, TrendingDown, Target, Zap, Star, Settings, Users, ShoppingCart, TrendingDown as Triangle, Award, Compass, Gift, MapPin, Palette, Rocket } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { apiService } from '../services/api';
 
 interface ExperimentTableProps {
   filters: {
     tipologia: string;
     palanca: string;
     kpi: string;
-    periodo: string;
   };
 }
 
-// Datos de la tabla basados en el diseño de Figma
-const experimentData = {
-  sellIn: {
-    cajasEstandarizadas: {
-      palancaA: { value: '45.2K', change: '+12.5%', positive: true },
-      palancaB: { value: '38.7K', change: '+8.3%', positive: true },
-      palancaC: { value: '41.1K', change: '-2.1%', positive: false }
-    },
-    ventas: {
-      palancaA: { value: '€1.8M', change: '+16.7%', positive: true },
-      palancaB: { value: '€1.5M', change: '+9.2%', positive: true },
-      palancaC: { value: '€1.6M', change: '+3.4%', positive: true }
-    }
-  },
-  sellOut: {
-    cajasEstandarizadas: {
-      palancaA: { value: '42.8K', change: '+18.9%', positive: true },
-      palancaB: { value: '35.1K', change: '+5.7%', positive: true },
-      palancaC: { value: '39.3K', change: '-4.2%', positive: false }
-    },
-    ventas: {
-      palancaA: { value: '€2.1M', change: '+21.3%', positive: true },
-      palancaB: { value: '€1.7M', change: '+12.8%', positive: true },
-      palancaC: { value: '€1.9M', change: '+6.1%', positive: true }
-    }
-  }
-};
-
-const CellValue = ({ data }: { data: { value: string; change: string; positive: boolean } }) => (
+// Component for displaying cell values horizontally
+const CellValue = ({ 
+  variacion_promedio, 
+  diferencia_vs_control 
+}: { 
+  variacion_promedio: number; 
+  diferencia_vs_control: number; 
+}) => (
   <div className="text-center">
-    <div className="font-medium text-sm text-foreground">{data.value}</div>
-    <div className={`flex items-center justify-center gap-1 text-xs ${
-      data.positive ? 'text-green-600' : 'text-red-600'
-    }`}>
-      {data.positive ? (
-        <TrendingUp className="h-3 w-3" />
-      ) : (
-        <TrendingDown className="h-3 w-3" />
-      )}
-      <span>{data.change}</span>
+    <div className="flex items-center justify-center gap-2">
+      <div className="font-medium text-sm text-foreground">
+        {variacion_promedio.toFixed(1)}%
+      </div>
+      <div className={`text-xs font-medium ${
+        diferencia_vs_control >= 0 ? 'text-green-600' : 'text-red-600'
+      }`}>
+        {diferencia_vs_control >= 0 ? '+' : ''}{diferencia_vs_control.toFixed(1)}%
+      </div>
     </div>
   </div>
 );
 
 export function ExperimentTable({ filters }: ExperimentTableProps) {
+  const [resultsData, setResultsData] = useState<any[]>([]);
+  const [palancas, setPalancas] = useState<string[]>([]);
+  const [kpis, setKpis] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadResultsData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await apiService.getDashboardResults(filters.tipologia);
+        
+        if (response.success) {
+          setResultsData(response.data);
+          setPalancas(response.palancas);
+          setKpis(response.kpis);
+        } else {
+          setError('Error loading results data');
+        }
+      } catch (err) {
+        console.error('Error loading results:', err);
+        setError('Error connecting to server');
+        // Fallback to empty data
+        setResultsData([]);
+        setPalancas([]);
+        setKpis([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadResultsData();
+  }, [filters.tipologia]); // Reload when tipologia changes
+
+  // Helper function to find data for a specific KPI and palanca combination
+  const findDataForCell = (kpi: string, palanca: string, source: 'sell_in' | 'sell_out') => {
+    return resultsData.find(item => 
+      item.kpi === kpi && 
+      item.palanca === palanca && 
+      item.source === source
+    );
+  };
+
+  // Group KPIs by source (sell_in, sell_out)
+  const groupedKpis = {
+    sell_in: kpis.filter(kpi => resultsData.some(item => item.kpi === kpi && item.source === 'sell_in')),
+    sell_out: kpis.filter(kpi => resultsData.some(item => item.kpi === kpi && item.source === 'sell_out'))
+  };
+
+  if (loading) {
+    return (
+      <Card className="h-full bg-card shadow-sm">
+        <CardContent className="flex items-center justify-center h-full">
+          <div className="text-muted-foreground">Cargando resultados...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="h-full bg-card shadow-sm">
+        <CardContent className="flex items-center justify-center h-full">
+          <div className="text-red-600">{error}</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (resultsData.length === 0) {
+    return (
+      <Card className="h-full bg-card shadow-sm">
+        <CardContent className="flex items-center justify-center h-full">
+          <div className="text-muted-foreground">No hay datos disponibles para la tipología seleccionada</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="h-full bg-card shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="text-foreground">Resultados por KPI y Palanca</CardTitle>
+        <CardTitle className="text-foreground">
+          Resultados por KPI y Palanca - {filters.tipologia}
+        </CardTitle>
       </CardHeader>
       <CardContent className="h-[calc(100%-60px)] p-0">
         <ScrollArea className="h-full px-6 pb-6">
@@ -69,90 +131,115 @@ export function ExperimentTable({ filters }: ExperimentTableProps) {
               <TableRow>
                 <TableHead className="w-32 text-muted-foreground font-medium">Grupo</TableHead>
                 <TableHead className="w-40 text-muted-foreground font-medium">KPI</TableHead>
-                <TableHead className="text-center text-orange-600 font-medium">
-                  <div className="flex items-center justify-center gap-2">
-                    <Target className="h-4 w-4" />
-                    <span>Palanca A</span>
-                  </div>
-                </TableHead>
-                <TableHead className="text-center text-blue-600 font-medium">
-                  <div className="flex items-center justify-center gap-2">
-                    <Zap className="h-4 w-4" />
-                    <span>Palanca B</span>
-                  </div>
-                </TableHead>
-                <TableHead className="text-center text-green-600 font-medium">
-                  <div className="flex items-center justify-center gap-2">
-                    <Star className="h-4 w-4" />
-                    <span>Palanca C</span>
-                  </div>
-                </TableHead>
+                {palancas.map((palanca) => {
+                  // Icon depends on specific palanca name (consistent across tipologías)
+                  const getPalancaIcon = (palancaName: string) => {
+                    // Map specific palancas to unique icons
+                    const palancaIconMap: Record<string, any> = {
+                      'Metro cuadrado': Target,
+                      'Nevera en punto de pago': Zap,
+                      'Punta de Góndola': Star,
+                      'Rompe tráfico Cross Category': Settings,
+                      'Zona de Hidratación ': Users,
+                      'Cajero vendedor': ShoppingCart,
+                      'Mini vallas en fachada': Award,
+                      'Tienda Multipalanca': Compass,
+                      'Entrepaño con comunicación': Gift,
+                      'Exhibición Adicional - Mamut': MapPin
+                    };
+                    
+                    // Return specific icon or fallback to a unique one based on string length + first char
+                    if (palancaIconMap[palancaName]) {
+                      return palancaIconMap[palancaName];
+                    }
+                    
+                    // Fallback: use string length + first character for uniqueness
+                    const fallbackIcons = [Palette, Rocket];
+                    const index = (palancaName.length + palancaName.charCodeAt(0)) % fallbackIcons.length;
+                    return fallbackIcons[index];
+                  };
+                  
+                  const IconComponent = getPalancaIcon(palanca);
+                  
+                  return (
+                    <TableHead key={palanca} className="text-center text-muted-foreground font-medium">
+                      <div className="flex items-center justify-center gap-2">
+                        <IconComponent className="h-4 w-4" />
+                        <span>{palanca}</span>
+                      </div>
+                    </TableHead>
+                  );
+                })}
               </TableRow>
             </TableHeader>
             <TableBody>
               {/* Sell In Group */}
-              <TableRow className="hover:bg-muted/50">
-                <TableCell className="font-medium text-foreground" rowSpan={2}>
-                  <div className="flex items-center gap-2">
-                    <div className="w-1 h-8 bg-blue-600 rounded-full"></div>
-                    <span>Sell In</span>
-                  </div>
-                </TableCell>
-                <TableCell className="font-medium text-sm text-muted-foreground">Cajas Estandarizadas</TableCell>
-                <TableCell>
-                  <CellValue data={experimentData.sellIn.cajasEstandarizadas.palancaA} />
-                </TableCell>
-                <TableCell>
-                  <CellValue data={experimentData.sellIn.cajasEstandarizadas.palancaB} />
-                </TableCell>
-                <TableCell>
-                  <CellValue data={experimentData.sellIn.cajasEstandarizadas.palancaC} />
-                </TableCell>
-              </TableRow>
-              <TableRow className="hover:bg-muted/50">
-                <TableCell className="font-medium text-sm text-muted-foreground">Ventas</TableCell>
-                <TableCell>
-                  <CellValue data={experimentData.sellIn.ventas.palancaA} />
-                </TableCell>
-                <TableCell>
-                  <CellValue data={experimentData.sellIn.ventas.palancaB} />
-                </TableCell>
-                <TableCell>
-                  <CellValue data={experimentData.sellIn.ventas.palancaC} />
-                </TableCell>
-              </TableRow>
+              {groupedKpis.sell_in.length > 0 && (
+                <>
+                  {groupedKpis.sell_in.map((kpi, kpiIndex) => (
+                    <TableRow key={`sell_in_${kpi}`} className="hover:bg-muted/50">
+                      {kpiIndex === 0 && (
+                        <TableCell className="font-medium text-foreground" rowSpan={groupedKpis.sell_in.length}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-1 h-8 bg-blue-600 rounded-full"></div>
+                            <span>Sell In</span>
+                          </div>
+                        </TableCell>
+                      )}
+                      <TableCell className="font-medium text-sm text-muted-foreground">{kpi}</TableCell>
+                      {palancas.map((palanca) => {
+                        const data = findDataForCell(kpi, palanca, 'sell_in');
+                        return (
+                          <TableCell key={palanca}>
+                            {data ? (
+                              <CellValue 
+                                variacion_promedio={data.variacion_promedio}
+                                diferencia_vs_control={data.diferencia_vs_control}
+                              />
+                            ) : (
+                              <div className="text-center text-muted-foreground text-sm">N/A</div>
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
+                </>
+              )}
 
               {/* Sell Out Group */}
-              <TableRow className="hover:bg-muted/50 border-t-2">
-                <TableCell className="font-medium text-foreground" rowSpan={2}>
-                  <div className="flex items-center gap-2">
-                    <div className="w-1 h-8 bg-green-600 rounded-full"></div>
-                    <span>Sell Out</span>
-                  </div>
-                </TableCell>
-                <TableCell className="font-medium text-sm text-muted-foreground">Cajas Estandarizadas</TableCell>
-                <TableCell>
-                  <CellValue data={experimentData.sellOut.cajasEstandarizadas.palancaA} />
-                </TableCell>
-                <TableCell>
-                  <CellValue data={experimentData.sellOut.cajasEstandarizadas.palancaB} />
-                </TableCell>
-                <TableCell>
-                  <CellValue data={experimentData.sellOut.cajasEstandarizadas.palancaC} />
-                </TableCell>
-              </TableRow>
-              <TableRow className="hover:bg-muted/50">
-                <TableCell className="font-medium text-sm text-muted-foreground">Ventas</TableCell>
-                <TableCell>
-                  <CellValue data={experimentData.sellOut.ventas.palancaA} />
-                </TableCell>
-                <TableCell>
-                  <CellValue data={experimentData.sellOut.ventas.palancaB} />
-                </TableCell>
-                <TableCell>
-                  <CellValue data={experimentData.sellOut.ventas.palancaC} />
-                </TableCell>
-              </TableRow>
+              {groupedKpis.sell_out.length > 0 && (
+                <>
+                  {groupedKpis.sell_out.map((kpi, kpiIndex) => (
+                    <TableRow key={`sell_out_${kpi}`} className={`hover:bg-muted/50 ${kpiIndex === 0 && groupedKpis.sell_in.length > 0 ? 'border-t-2' : ''}`}>
+                      {kpiIndex === 0 && (
+                        <TableCell className="font-medium text-foreground" rowSpan={groupedKpis.sell_out.length}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-1 h-8 bg-green-600 rounded-full"></div>
+                            <span>Sell Out</span>
+                          </div>
+                        </TableCell>
+                      )}
+                      <TableCell className="font-medium text-sm text-muted-foreground">{kpi}</TableCell>
+                      {palancas.map((palanca) => {
+                        const data = findDataForCell(kpi, palanca, 'sell_out');
+                        return (
+                          <TableCell key={palanca}>
+                            {data ? (
+                              <CellValue 
+                                variacion_promedio={data.variacion_promedio}
+                                diferencia_vs_control={data.diferencia_vs_control}
+                              />
+                            ) : (
+                              <div className="text-center text-muted-foreground text-sm">N/A</div>
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
+                </>
+              )}
             </TableBody>
           </Table>
         </ScrollArea>

@@ -193,6 +193,80 @@ class ApiService {
   }> {
     return this.fetchApi('/api/analytics/revenue-by-city');
   }
+
+  // Get dashboard filter options
+  async getDashboardFilterOptions(): Promise<{
+    success: boolean;
+    options: {
+      tipologia: string[];
+      palanca: string[];
+      kpi: string[];
+    };
+  }> {
+    return this.fetchApi('/api/dashboard/filter-options');
+  }
+
+  // Get dashboard results data
+  async getDashboardResults(tipologia?: string): Promise<{
+    success: boolean;
+    data: Array<{
+      source: string;
+      kpi: string;
+      palanca: string;
+      variacion_promedio: number;
+      diferencia_vs_control: number;
+    }>;
+    palancas: string[];
+    kpis: string[];
+    filtered_by: string | null;
+  }> {
+    const params = tipologia ? `?tipologia=${encodeURIComponent(tipologia)}` : '';
+    return this.fetchApi(`/api/dashboard/results${params}`);
+  }
+
+  // Get dashboard data summary
+  async getDashboardDataSummary(): Promise<{
+    success: boolean;
+    summary: {
+      sell_in_rows: number;
+      sell_out_rows: number;
+      sell_in_columns: string[];
+      sell_out_columns: string[];
+      tipologia_options: number;
+      palanca_options: number;
+      kpi_options: number;
+    };
+  }> {
+    return this.fetchApi('/api/dashboard/data-summary');
+  }
+
+  // Get evolution data for timeline chart
+  async getEvolutionData(palancaId: number = 5, kpiId: number = 1, tipologia?: string): Promise<{
+    success: boolean;
+    data: Array<{
+      period: string;
+      test_value: number;
+      control_value: number | null;
+      difference: number | null;
+    }>;
+    palanca_name: string;
+    kpi_name: string;
+    palanca_id: number;
+    kpi_id: number;
+    available_palancas: number[];
+    available_kpis: number[];
+    filtered_by: string | null;
+    error?: string;
+  }> {
+    const params = new URLSearchParams();
+    params.append('palanca', palancaId.toString());
+    params.append('kpi', kpiId.toString());
+    if (tipologia) {
+      params.append('tipologia', tipologia);
+    }
+    
+    return this.fetchApi(`/api/dashboard/evolution-data?${params.toString()}`);
+  }
 }
 
 export const apiService = new ApiService();

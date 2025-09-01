@@ -1,10 +1,11 @@
 """
 Analytics API endpoints
 """
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from app.services.session_manager import session_manager
 from app.services.cache_service import query_cache
 from app.data_store import DataStore
+from app.services.excel_service import excel_service
 
 analytics_bp = Blueprint('analytics', __name__)
 
@@ -198,4 +199,113 @@ def get_revenue_by_city():
         return jsonify({
             'success': False,
             'error': f'Internal server error: {str(e)}'
+        }), 500
+
+@analytics_bp.route('/api/dashboard/filter-options', methods=['GET'])
+def get_filter_options():
+    """Get filter options from maestro files"""
+    try:
+        options = excel_service.get_filter_options()
+        return jsonify({
+            'success': True,
+            'options': options
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Internal server error: {str(e)}'
+        }), 500
+
+@analytics_bp.route('/api/dashboard/results', methods=['GET'])
+def get_dashboard_results():
+    """Get dashboard results data filtered by tipologia"""
+    try:
+        tipologia = request.args.get('tipologia')
+        results = excel_service.get_results_data(tipologia)
+        
+        return jsonify(results), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Internal server error: {str(e)}'
+        }), 500
+
+@analytics_bp.route('/api/dashboard/data-summary', methods=['GET'])
+def get_data_summary():
+    """Get summary of available Excel data"""
+    try:
+        summary = excel_service.get_data_summary()
+        return jsonify({
+            'success': True,
+            'summary': summary
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Internal server error: {str(e)}'
+        }), 500
+
+@analytics_bp.route('/api/dashboard/evolution-data', methods=['GET'])
+def get_evolution_data():
+    """Get evolution data for timeline chart"""
+    try:
+        palanca_id = int(request.args.get('palanca', 5))  # Default palanca=5
+        kpi_id = int(request.args.get('kpi', 1))  # Default kpi=1
+        tipologia = request.args.get('tipologia')
+        
+        results = excel_service.get_evolution_data(palanca_id, kpi_id, tipologia)
+        
+        return jsonify(results), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Internal server error: {str(e)}'
+        }), 500
+
+@analytics_bp.route('/api/dashboard/evolution-debug', methods=['GET'])
+def get_evolution_debug():
+    """Debug evolution data structure"""
+    try:
+        evolution_df = excel_service.evolution_df
+        
+        # Get basic info
+        columns = list(evolution_df.columns)
+        unique_periods_semana = sorted(evolution_df['semana_fecha_inicio'].unique()) if 'semana_fecha_inicio' in columns else []
+        unique_periods_periodo = sorted(evolution_df['periodo'].unique()) if 'periodo' in columns else []
+        unique_palancas = sorted(evolution_df['palanca_id'].unique())
+        unique_kpis = sorted(evolution_df['kpi'].unique())
+        unique_tipologias = sorted(evolution_df['tipologia_id'].unique())
+        
+        # Sample data for palanca=5, kpi=1
+        sample_cols = ['cliente_sell_in_id', 'tipologia_id', 'palanca_id', 'kpi', 'valor']
+        if 'periodo' in columns:
+            sample_cols.append('periodo')
+        if 'semana_fecha_inicio' in columns:
+            sample_cols.append('semana_fecha_inicio')
+            
+        sample_data = evolution_df[
+            (evolution_df['palanca_id'] == 5) & 
+            (evolution_df['kpi'] == 1)
+        ][sample_cols].head(10)
+        
+        return jsonify({
+            'success': True,
+            'total_rows': len(evolution_df),
+            'columns': columns,
+            'unique_periods_semana': [str(p) for p in unique_periods_semana],
+            'unique_periods_periodo': [str(p) for p in unique_periods_periodo],
+            'unique_palancas': [int(p) for p in unique_palancas],
+            'unique_kpis': [int(k) for k in unique_kpis],
+            'unique_tipologias': [int(t) for t in unique_tipologias],
+            'sample_data_palanca5_kpi1': sample_data.to_dict('records')
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Debug error: {str(e)}'
         }), 500

@@ -16,10 +16,17 @@ import {
   Database, 
   Clock, 
   Zap,
-  AlertCircle 
+  AlertCircle,
+  Sun,
+  Moon,
+  BarChart3,
+  MessageSquare 
 } from 'lucide-react';
 import { useChatContext } from '../contexts/ChatContext';
 import { apiService } from '../services/api';
+import { useTheme } from './ThemeProvider';
+import gatoradeLogo from '../assets/4de2379cad6c1c3cdddbd220d1ac6ce242ae078f.png';
+import gatoradeLogoDark from '../assets/0ebfb34dd11ac7b6cf64b19c7b02742c273e0b93.png';
 
 interface ResultsProps {
   userEmail: string;
@@ -27,6 +34,7 @@ interface ResultsProps {
 }
 
 export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
+  const { theme, toggleTheme } = useTheme();
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -216,49 +224,57 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
   }
 
   return (
-    <div className="h-screen w-screen bg-gradient-to-r from-muted/30 via-background to-muted/30 flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="bg-white border-b border-border shadow-sm flex-shrink-0">
-        <div className="px-6 py-4 flex justify-between items-center">
+    <div className="min-h-screen bg-background">
+      {/* Header Navigation - matching Dashboard */}
+      <header className="border-b bg-card px-6 py-4">
+        <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button 
-              variant="ghost" 
-              onClick={onBackToDashboard}
-              className="text-secondary hover:text-secondary/80"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Dashboard
-            </Button>
-            <div className="w-px h-6 bg-border"></div>
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <CheckCircle className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold text-secondary">Análisis Avanzado</h1>
-              <p className="text-sm text-muted-foreground">
-                IA Asistente de Datos • {sessionId ? `Sesión: ${sessionId.slice(-8)}` : 'Conectando...'}
-              </p>
+            <div className="flex items-center gap-3">
+              <img 
+                src={theme === 'dark' ? gatoradeLogoDark : gatoradeLogo} 
+                alt="Gatorade Logo" 
+                className="w-10 h-10 object-contain"
+              />
+              <h1 className="text-xl font-bold text-foreground">
+                Gatorade A/B Testing
+              </h1>
             </div>
           </div>
           
-          {/* Analytics Display */}
-          {analytics.cache_hit_rate && (
-            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-              <div className="flex items-center space-x-1">
-                <Zap className="w-4 h-4" />
-                <span>Cache: {analytics.cache_hit_rate.toFixed(0)}%</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <Database className="w-4 h-4" />
-                <span>Consultas: {analytics.total_queries || 0}</span>
-              </div>
-            </div>
-          )}
+          <nav className="flex items-center space-x-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleTheme}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              {theme === 'light' ? (
+                <Moon className="h-4 w-4" />
+              ) : (
+                <Sun className="h-4 w-4" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={onBackToDashboard}
+              className="flex items-center space-x-2 text-muted-foreground hover:text-foreground"
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span>Dashboard</span>
+            </Button>
+            <Button
+              variant="default"
+              className="flex items-center space-x-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              <MessageSquare className="h-4 w-4" />
+              <span>Análisis</span>
+            </Button>
+          </nav>
         </div>
-      </div>
+      </header>
 
-      {/* Contenido principal horizontal */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Main Content */}
+      <main className="flex h-[calc(100vh-81px)]">
         {/* Panel izquierdo - Resultados detallados */}
         <div className="flex-1 p-6 overflow-y-auto">
           <Tabs defaultValue="overview" className="h-full flex flex-col">
@@ -554,7 +570,7 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
             </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

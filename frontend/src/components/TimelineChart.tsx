@@ -1,89 +1,189 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { useState, useEffect } from 'react';
+import { apiService } from '../services/api';
 
 interface TimelineChartProps {
   filters: {
     tipologia: string;
     palanca: string;
     kpi: string;
-    periodo: string;
   };
 }
 
-// Datos del timeline basados en el diseño (sin sombras verdes/negras)
-const timelineData = [
-  { fecha: 'Sem 1', control: 2400, palancaA: 2700 },
-  { fecha: 'Sem 2', control: 2450, palancaA: 2800 },
-  { fecha: 'Sem 3', control: 2380, palancaA: 2900 },
-  { fecha: 'Sem 4', control: 2420, palancaA: 2950 },
-  { fecha: 'Sem 5', control: 2400, palancaA: 3100 },
-  { fecha: 'Sem 6', control: 2460, palancaA: 3200 },
-  { fecha: 'Sem 7', control: 2440, palancaA: 3150 },
-  { fecha: 'Sem 8', control: 2480, palancaA: 3300 },
-];
-
 export function TimelineChart({ filters }: TimelineChartProps) {
+  const [evolutionData, setEvolutionData] = useState<any[]>([]);
+  const [availablePalancas, setAvailablePalancas] = useState<number[]>([]);
+  const [availableKpis, setAvailableKpis] = useState<number[]>([]);
+  const [selectedPalanca, setSelectedPalanca] = useState<number>(8); // Default to Punta de Góndola
+  const [selectedKpi, setSelectedKpi] = useState<number>(1); // Default to Cajas Estandarizadas
+  const [palancaName, setPalancaName] = useState<string>('');
+  const [kpiName, setKpiName] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadEvolutionData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await apiService.getEvolutionData(selectedPalanca, selectedKpi, filters.tipologia);
+        
+        if (response.success) {
+          // Transform data for the chart
+          const chartData = response.data.map(item => ({
+            period: item.period,
+            control: item.control_value,
+            test: item.test_value,
+            difference: item.difference
+          }));
+          
+          setEvolutionData(chartData);
+          setPalancaName(response.palanca_name);
+          setKpiName(response.kpi_name);
+          setAvailablePalancas(response.available_palancas);
+          setAvailableKpis(response.available_kpis);
+        } else {
+          setError(response.error || 'Error loading evolution data');
+        }
+      } catch (err) {
+        console.error('Error loading evolution data:', err);
+        setError('Error connecting to server');
+        setEvolutionData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadEvolutionData();
+  }, [selectedPalanca, selectedKpi, filters.tipologia]);
+
+  if (loading) {
+    return (
+      <Card className="h-full bg-card shadow-sm">
+        <CardContent className="flex items-center justify-center h-full">
+          <div className="text-muted-foreground">Cargando evolución temporal...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="h-full bg-card shadow-sm">
+        <CardContent className="flex items-center justify-center h-full">
+          <div className="text-red-600">{error}</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="h-full bg-card shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="text-foreground">Evolución Temporal - Sell Out (€K)</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-foreground">
+            Evolución Temporal - {kpiName} | {palancaName}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Select 
+              value={selectedPalanca.toString()} 
+              onValueChange={(value) => setSelectedPalanca(Number(value))}
+            >
+              <SelectTrigger className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availablePalancas.map((palanca) => (
+                  <SelectItem key={palanca} value={palanca.toString()}>
+                    {palanca}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select 
+              value={selectedKpi.toString()} 
+              onValueChange={(value) => setSelectedKpi(Number(value))}
+            >
+              <SelectTrigger className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableKpis.map((kpi) => (
+                  <SelectItem key={kpi} value={kpi.toString()}>
+                    {kpi}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent className="h-[calc(100%-60px)]">
+      <CardContent className="h-[calc(100%-80px)]">
         <div className="h-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={timelineData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis 
-                dataKey="fecha" 
-                stroke="hsl(var(--muted-foreground))"
-                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-              />
-              <YAxis 
-                stroke="hsl(var(--muted-foreground))"
-                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-              />
-              <Tooltip 
-                formatter={(value: any, name: string) => [
-                  `€${value}K`, 
-                  name === 'control' ? 'Control' : 'Palanca A'
-                ]}
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                  color: 'hsl(var(--foreground))'
-                }}
-              />
-              <Legend 
-                formatter={(value: string) => 
-                  value === 'control' ? 'Control' : 
-                  value === 'palancaA' ? 'Palanca A' : value
-                }
-              />
-              
-              {/* Línea de control - gris discontinua */}
-              <Line 
-                type="monotone" 
-                dataKey="control" 
-                stroke="hsl(var(--muted-foreground))" 
-                strokeWidth={2}
-                strokeDasharray="8 4"
-                dot={{ r: 4, fill: "hsl(var(--muted-foreground))" }}
-                activeDot={{ r: 6, fill: "hsl(var(--muted-foreground))", stroke: "hsl(var(--background))", strokeWidth: 2 }}
-              />
-              
-              {/* Línea de palanca A - naranja continua */}
-              <Line 
-                type="monotone" 
-                dataKey="palancaA" 
-                stroke="hsl(var(--chart-1))" 
-                strokeWidth={3}
-                dot={{ r: 4, fill: "hsl(var(--chart-1))" }}
-                activeDot={{ r: 6, fill: "hsl(var(--chart-1))", stroke: "hsl(var(--background))", strokeWidth: 2 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {evolutionData.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              No hay datos disponibles para esta combinación
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={evolutionData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis 
+                  dataKey="period" 
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                />
+                <YAxis 
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                />
+                <Tooltip 
+                  formatter={(value: any, name: string) => [
+                    Number(value).toFixed(2), 
+                    name === 'control' ? 'Control' : 
+                    name === 'test' ? palancaName : name
+                  ]}
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    color: 'hsl(var(--foreground))'
+                  }}
+                />
+                <Legend 
+                  formatter={(value: string) => 
+                    value === 'control' ? 'Control' : 
+                    value === 'test' ? palancaName : value
+                  }
+                />
+                
+                {/* Línea de control - gris discontinua */}
+                <Line 
+                  type="monotone" 
+                  dataKey="control" 
+                  stroke="hsl(var(--muted-foreground))" 
+                  strokeWidth={2}
+                  strokeDasharray="8 4"
+                  dot={{ r: 4, fill: "hsl(var(--muted-foreground))" }}
+                  activeDot={{ r: 6, fill: "hsl(var(--muted-foreground))", stroke: "hsl(var(--background))", strokeWidth: 2 }}
+                />
+                
+                {/* Línea de test - naranja continua */}
+                <Line 
+                  type="monotone" 
+                  dataKey="test" 
+                  stroke="hsl(var(--chart-1))" 
+                  strokeWidth={3}
+                  dot={{ r: 4, fill: "hsl(var(--chart-1))" }}
+                  activeDot={{ r: 6, fill: "hsl(var(--chart-1))", stroke: "hsl(var(--background))", strokeWidth: 2 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </CardContent>
     </Card>
