@@ -117,3 +117,4 @@ frontend/nginx.conf.cloudrun
 frontend/nginx.conf.static
 backend/cloudbuild.yaml
 .env.cloudrun
+/backend/data
