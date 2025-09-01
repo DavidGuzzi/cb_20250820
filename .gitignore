@@ -103,3 +103,17 @@ htmlcov/
 uso.txt
 /Login App Mockup
 /frontend/src/assets
+backend/Dockerfile.cloudrun
+deploy-backend-cloudrun.sh
+DEPLOY-CLOUDRUN.md
+deploy-cloudrun.sh
+deploy-frontend-cloudrun.sh
+frontend/cloudbuild.yaml
+frontend/Dockerfile.cloudrun
+frontend/Dockerfile.cloudrun-simple
+frontend/Dockerfile.simple
+frontend/Dockerfile.static
+frontend/nginx.conf.cloudrun
+frontend/nginx.conf.static
+backend/cloudbuild.yaml
+.env.cloudrun
