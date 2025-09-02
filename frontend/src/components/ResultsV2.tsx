@@ -287,10 +287,10 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
             <div className="flex-1 overflow-hidden">
               <TabsContent value="overview" className="h-full space-y-4 overflow-y-auto">
                 {detailedData.map((test) => (
-                  <Card key={test.id} className="bg-white border-l-4 border-l-accent">
+                  <Card key={test.id} className="bg-card border-l-4 border-l-accent">
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-secondary">{test.name}</CardTitle>
+                        <CardTitle className="text-foreground">{test.name}</CardTitle>
                         <div className="flex items-center space-x-2">
                           <Badge className="bg-accent text-white">
                             <CheckCircle className="w-3 h-3 mr-1" />
@@ -310,9 +310,9 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
                           <div key={index} className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/30">
                             <div className="flex-1">
                               <div className="flex items-center justify-between mb-2">
-                                <h4 className="font-medium text-secondary">{variant.name}</h4>
+                                <h4 className="font-medium text-foreground">{variant.name}</h4>
                                 <div className="flex items-center space-x-3">
-                                  <span className={`text-lg font-semibold ${variant.rate === Math.max(...test.variants.map(v => v.rate)) ? 'text-accent' : 'text-secondary'}`}>
+                                  <span className={`text-lg font-semibold ${variant.rate === Math.max(...test.variants.map(v => v.rate)) ? 'text-accent' : 'text-foreground'}`}>
                                     {variant.rate}%
                                   </span>
                                   {variant.rate === Math.max(...test.variants.map(v => v.rate)) && (
@@ -344,10 +344,10 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
               </TabsContent>
 
               <TabsContent value="details" className="h-full overflow-y-auto">
-                <Card className="bg-white h-full">
+                <Card className="bg-card h-full">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-secondary">Revenue por {chartType === 'region' ? 'Región' : 'Ciudad'}</CardTitle>
+                      <CardTitle className="text-foreground">Revenue por {chartType === 'region' ? 'Región' : 'Ciudad'}</CardTitle>
                       <div className="flex space-x-2">
                         <Button
                           variant={chartType === 'region' ? 'default' : 'outline'}
@@ -431,27 +431,27 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <Card className="p-4 bg-accent/10 border-accent/30">
                     <h4 className="font-medium text-accent mb-2">🏆 Experimentos Exitosos</h4>
-                    <p className="text-sm text-secondary">3 de 3 tests completados con resultados positivos significativos. 100% de tasa de éxito.</p>
+                    <p className="text-sm text-muted-foreground">3 de 3 tests completados con resultados positivos significativos. 100% de tasa de éxito.</p>
                   </Card>
 
                   <Card className="p-4 bg-primary/10 border-primary/30">
                     <h4 className="font-medium text-primary mb-2">💰 Impacto Total</h4>
-                    <p className="text-sm text-secondary">+$462,500 en revenue proyectado anual. ROI promedio del 340% sobre inversión.</p>
+                    <p className="text-sm text-muted-foreground">+$462,500 en revenue proyectado anual. ROI promedio del 340% sobre inversión.</p>
                   </Card>
 
                   <Card className="p-4 bg-secondary/10 border-secondary/30">
-                    <h4 className="font-medium text-secondary mb-2">📊 Mejor Performance</h4>
-                    <p className="text-sm text-secondary">Email personalizado: +60% lift. Mayor oportunidad de escalamiento inmediato.</p>
+                    <h4 className="font-medium text-foreground mb-2">📊 Mejor Performance</h4>
+                    <p className="text-sm text-muted-foreground">Email personalizado: +60% lift. Mayor oportunidad de escalamiento inmediato.</p>
                   </Card>
 
                   <Card className="p-4 bg-green-600/10 border-green-600/30">
-                    <h4 className="font-medium text-green-700 mb-2">✅ Listos para Implementar</h4>
-                    <p className="text-sm text-secondary">Todos los cambios validados estadísticamente. Implementación recomendada inmediata.</p>
+                    <h4 className="font-medium text-green-600 dark:text-green-400 mb-2">✅ Listos para Implementar</h4>
+                    <p className="text-sm text-muted-foreground">Todos los cambios validados estadísticamente. Implementación recomendada inmediata.</p>
                   </Card>
 
                   <Card className="lg:col-span-2 p-4 bg-orange-500/10 border-orange-500/30">
                     <h4 className="font-medium text-orange-600 mb-2">🎯 Estrategia de Expansión</h4>
-                    <p className="text-sm text-secondary">
+                    <p className="text-sm text-muted-foreground">
                       Próximos pasos: 1) Implementar cambios ganadores, 2) Escalar a mercados similares, 
                       3) Testear variaciones avanzadas, 4) Optimizar segmentación por demografía.
                     </p>
@@ -463,14 +463,14 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
         </div>
 
         {/* Panel derecho - Chatbot integrado */}
-        <div className="w-96 bg-white border-l border-border flex flex-col">
+        <div className="w-96 bg-card border-l border-border flex flex-col">
           <div className="p-4 border-b border-border">
             <div className="flex items-center space-x-2">
               <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
                 <Bot className="w-4 h-4 text-white" />
               </div>
               <div>
-                <h3 className="font-semibold text-secondary">Asistente de Datos IA</h3>
+                <h3 className="font-semibold text-foreground">Asistente de Datos IA</h3>
                 <p className="text-xs text-muted-foreground">
                   Conectado a base de datos real • Memoria conversacional
                 </p>
@@ -495,7 +495,7 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
                       )}
                     </div>
                     <div className="space-y-1">
-                      <div className={`px-3 py-2 rounded-lg text-sm ${message.sender === 'user' ? 'bg-primary text-white' : 'bg-muted text-secondary'}`}>
+                      <div className={`px-3 py-2 rounded-lg text-sm ${message.sender === 'user' ? 'bg-primary text-white' : 'bg-muted text-foreground'}`}>
                         {message.text}
                       </div>
                       

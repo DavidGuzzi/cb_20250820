@@ -143,8 +143,21 @@ docker-compose -f deploy/docker-compose.prod.yml up -d
 - **Containerized**: Docker for consistent deployment
 - **Health Monitoring**: Automated health checks and structured logging
 - **Modern Dashboard**: A/B Testing analytics with Figma-based design
+- **Integrated Filters**: Global filter system that impacts both table and timeline chart
 - **Dark/Light Theme**: Complete theme system with session isolation
 - **Responsive Design**: Mobile-friendly interface with adaptive layouts
+
+### Dashboard Filter System
+
+The dashboard includes an integrated filter system with the following behavior:
+- **Tipología filter**: Impacts both the results table and timeline chart
+- **Palanca filter**: Impacts only the timeline chart 
+- **KPI filter**: Impacts only the timeline chart
+- **Default values**: All filters have pre-selected default values:
+  - Tipología: "Super e Hiper"
+  - Palanca: "Punta de Góndola" 
+  - KPI: "Cajas Estandarizadas"
+- **Filter persistence**: The timeline chart uses global filters instead of its own controls
 
 ## Environment Variables
 

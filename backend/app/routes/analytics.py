@@ -266,6 +266,38 @@ def get_evolution_data():
             'error': f'Internal server error: {str(e)}'
         }), 500
 
+@analytics_bp.route('/api/dashboard/maestro-mappings', methods=['GET'])
+def get_maestro_mappings():
+    """Get mappings between names and IDs for all maestros"""
+    try:
+        # Get maestro mappings
+        tipologia_mapping = dict(zip(excel_service.maestro_tipologia_df['tipologia_name'], excel_service.maestro_tipologia_df['tipologia_id']))
+        palanca_mapping = dict(zip(excel_service.maestro_palanca_df['palanca_name'], excel_service.maestro_palanca_df['palanca_id']))
+        kpi_mapping = dict(zip(excel_service.maestro_kpi_df['kpi_name'], excel_service.maestro_kpi_df['kpi_id']))
+        
+        # Also get reverse mappings (ID to name)
+        tipologia_reverse = dict(zip(excel_service.maestro_tipologia_df['tipologia_id'], excel_service.maestro_tipologia_df['tipologia_name']))
+        palanca_reverse = dict(zip(excel_service.maestro_palanca_df['palanca_id'], excel_service.maestro_palanca_df['palanca_name']))
+        kpi_reverse = dict(zip(excel_service.maestro_kpi_df['kpi_id'], excel_service.maestro_kpi_df['kpi_name']))
+        
+        return jsonify({
+            'success': True,
+            'mappings': {
+                'tipologia_name_to_id': tipologia_mapping,
+                'palanca_name_to_id': palanca_mapping,
+                'kpi_name_to_id': kpi_mapping,
+                'tipologia_id_to_name': tipologia_reverse,
+                'palanca_id_to_name': palanca_reverse,
+                'kpi_id_to_name': kpi_reverse
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Error getting maestro mappings: {str(e)}'
+        }), 500
+
 @analytics_bp.route('/api/dashboard/evolution-debug', methods=['GET'])
 def get_evolution_debug():
     """Debug evolution data structure"""

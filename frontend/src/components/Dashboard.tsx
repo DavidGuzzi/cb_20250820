@@ -19,8 +19,8 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
   const { theme, toggleTheme } = useTheme();
   const [filters, setFilters] = useState({
     tipologia: 'Super e Hiper', // Default tipologia
-    palanca: '',
-    kpi: ''
+    palanca: 'Punta de Góndola', // Default palanca
+    kpi: 'Cajas Estandarizadas' // Default kpi
   });
 
   return (

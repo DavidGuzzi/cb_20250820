@@ -29,10 +29,31 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
         const response = await apiService.getDashboardFilterOptions();
         if (response.success) {
           setFilterOptions(response.options);
+          
+          // Set defaults for all filters if not already set
+          const newFilters = { ...filters };
+          let hasChanges = false;
+          
           // Set default tipologia if not already set
-          if (!filters.tipologia && response.options.tipologia?.length > 0) {
-            const defaultTipologia = response.options.tipologia.find((t: string) => t === 'Super e Hiper') || response.options.tipologia[0];
-            onFiltersChange({ ...filters, tipologia: defaultTipologia });
+          if (!newFilters.tipologia && response.options.tipologia?.length > 0) {
+            newFilters.tipologia = response.options.tipologia.find((t: string) => t === 'Super e Hiper') || response.options.tipologia[0];
+            hasChanges = true;
+          }
+          
+          // Set default palanca if not already set
+          if (!newFilters.palanca && response.options.palanca?.length > 0) {
+            newFilters.palanca = response.options.palanca.find((p: string) => p === 'Punta de Góndola') || response.options.palanca[0];
+            hasChanges = true;
+          }
+          
+          // Set default kpi if not already set
+          if (!newFilters.kpi && response.options.kpi?.length > 0) {
+            newFilters.kpi = response.options.kpi.find((k: string) => k === 'Cajas Estandarizadas') || response.options.kpi[0];
+            hasChanges = true;
+          }
+          
+          if (hasChanges) {
+            onFiltersChange(newFilters);
           }
         }
       } catch (error) {
@@ -56,14 +77,24 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
   };
 
   const clearFilters = () => {
+    // Reset to default values instead of empty strings
+    const defaultPalanca = filterOptions.palanca.find((p: string) => p === 'Punta de Góndola') || filterOptions.palanca[0] || '';
+    const defaultKpi = filterOptions.kpi.find((k: string) => k === 'Cajas Estandarizadas') || filterOptions.kpi[0] || '';
+    
     onFiltersChange({
       tipologia: 'Super e Hiper', // Keep default tipologia
-      palanca: '',
-      kpi: ''
+      palanca: defaultPalanca,
+      kpi: defaultKpi
     });
   };
 
-  const hasActiveFilters = filters.palanca !== '' || filters.kpi !== '' || (filters.tipologia !== '' && filters.tipologia !== 'Super e Hiper');
+  // Check if filters are different from their default values
+  const defaultPalanca = filterOptions.palanca.find((p: string) => p === 'Punta de Góndola') || filterOptions.palanca[0] || '';
+  const defaultKpi = filterOptions.kpi.find((k: string) => k === 'Cajas Estandarizadas') || filterOptions.kpi[0] || '';
+  
+  const hasActiveFilters = filters.tipologia !== 'Super e Hiper' || 
+                          filters.palanca !== defaultPalanca || 
+                          filters.kpi !== defaultKpi;
 
   return (
     <div className="space-y-4">

@@ -267,6 +267,21 @@ class ApiService {
     
     return this.fetchApi(`/api/dashboard/evolution-data?${params.toString()}`);
   }
+
+  // Get maestro mappings (name to ID and vice versa)
+  async getMaestroMappings(): Promise<{
+    success: boolean;
+    mappings: {
+      tipologia_name_to_id: Record<string, number>;
+      palanca_name_to_id: Record<string, number>;
+      kpi_name_to_id: Record<string, number>;
+      tipologia_id_to_name: Record<number, string>;
+      palanca_id_to_name: Record<number, string>;
+      kpi_id_to_name: Record<number, string>;
+    };
+  }> {
+    return this.fetchApi('/api/dashboard/maestro-mappings');
+  }
 }
 
 export const apiService = new ApiService();

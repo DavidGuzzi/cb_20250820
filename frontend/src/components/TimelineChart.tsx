@@ -1,6 +1,5 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 
@@ -14,22 +13,44 @@ interface TimelineChartProps {
 
 export function TimelineChart({ filters }: TimelineChartProps) {
   const [evolutionData, setEvolutionData] = useState<any[]>([]);
-  const [availablePalancas, setAvailablePalancas] = useState<number[]>([]);
-  const [availableKpis, setAvailableKpis] = useState<number[]>([]);
-  const [selectedPalanca, setSelectedPalanca] = useState<number>(8); // Default to Punta de Góndola
-  const [selectedKpi, setSelectedKpi] = useState<number>(1); // Default to Cajas Estandarizadas
   const [palancaName, setPalancaName] = useState<string>('');
   const [kpiName, setKpiName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [maestroMappings, setMaestroMappings] = useState<any>(null);
+
+  // Load maestro mappings once
+  useEffect(() => {
+    const loadMappings = async () => {
+      try {
+        const response = await apiService.getMaestroMappings();
+        if (response.success) {
+          setMaestroMappings(response.mappings);
+        }
+      } catch (err) {
+        console.error('Error loading maestro mappings:', err);
+      }
+    };
+
+    loadMappings();
+  }, []);
 
   useEffect(() => {
     const loadEvolutionData = async () => {
+      if (!maestroMappings) return;
+      
       try {
         setLoading(true);
         setError(null);
         
-        const response = await apiService.getEvolutionData(selectedPalanca, selectedKpi, filters.tipologia);
+        // Convert filter names to IDs, with defaults
+        const defaultPalancaId = maestroMappings.palanca_name_to_id['Punta de Góndola'] || 8;
+        const defaultKpiId = maestroMappings.kpi_name_to_id['Cajas Estandarizadas'] || 1;
+        
+        const palancaId = filters.palanca ? maestroMappings.palanca_name_to_id[filters.palanca] || defaultPalancaId : defaultPalancaId;
+        const kpiId = filters.kpi ? maestroMappings.kpi_name_to_id[filters.kpi] || defaultKpiId : defaultKpiId;
+        
+        const response = await apiService.getEvolutionData(palancaId, kpiId, filters.tipologia);
         
         if (response.success) {
           // Transform data for the chart
@@ -43,8 +64,6 @@ export function TimelineChart({ filters }: TimelineChartProps) {
           setEvolutionData(chartData);
           setPalancaName(response.palanca_name);
           setKpiName(response.kpi_name);
-          setAvailablePalancas(response.available_palancas);
-          setAvailableKpis(response.available_kpis);
         } else {
           setError(response.error || 'Error loading evolution data');
         }
@@ -58,7 +77,7 @@ export function TimelineChart({ filters }: TimelineChartProps) {
     };
 
     loadEvolutionData();
-  }, [selectedPalanca, selectedKpi, filters.tipologia]);
+  }, [maestroMappings, filters.palanca, filters.kpi, filters.tipologia]);
 
   if (loading) {
     return (
@@ -83,43 +102,9 @@ export function TimelineChart({ filters }: TimelineChartProps) {
   return (
     <Card className="h-full bg-card shadow-sm">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-foreground">
-            Evolución Temporal - {kpiName} | {palancaName}
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Select 
-              value={selectedPalanca.toString()} 
-              onValueChange={(value) => setSelectedPalanca(Number(value))}
-            >
-              <SelectTrigger className="w-20">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availablePalancas.map((palanca) => (
-                  <SelectItem key={palanca} value={palanca.toString()}>
-                    {palanca}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select 
-              value={selectedKpi.toString()} 
-              onValueChange={(value) => setSelectedKpi(Number(value))}
-            >
-              <SelectTrigger className="w-20">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableKpis.map((kpi) => (
-                  <SelectItem key={kpi} value={kpi.toString()}>
-                    {kpi}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        <CardTitle className="text-foreground">
+          Evolución Temporal - {kpiName} | {palancaName}
+        </CardTitle>
       </CardHeader>
       <CardContent className="h-[calc(100%-80px)]">
         <div className="h-full">
