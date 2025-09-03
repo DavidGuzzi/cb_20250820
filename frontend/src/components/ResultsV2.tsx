@@ -166,6 +166,27 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
     }, 100);
   };
 
+  const handleQuickQuestion = async (question: string) => {
+    if (isTyping) return;
+    
+    await sendMessage(question);
+    
+    // Enfocar después de enviar pregunta rápida
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 100);
+  };
+
+  // Preguntas preliminares sugeridas
+  const quickQuestions = [
+    "¿Cuáles fueron los PDVs con mayor conversión este mes?",
+    "Muéstrame el análisis de revenue por ciudad", 
+    "¿Qué experimentos A/B tuvieron mejor performance?",
+    "Comparar visitantes vs conversiones por región"
+  ];
+
   // Colores para el gráfico de torta
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
@@ -276,7 +297,7 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
       {/* Main Content */}
       <main className="flex h-[calc(100vh-81px)]">
         {/* Panel izquierdo - Resultados detallados */}
-        <div className="flex-1 p-6 overflow-y-auto">
+        <div className="flex-[0.7] p-6 overflow-y-auto">
           <Tabs defaultValue="overview" className="h-full flex flex-col">
             <TabsList className="grid w-full grid-cols-3 mb-4">
               <TabsTrigger value="overview">Resumen Final</TabsTrigger>
@@ -463,7 +484,7 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
         </div>
 
         {/* Panel derecho - Chatbot integrado */}
-        <div className="w-96 bg-card border-l border-border flex flex-col">
+        <div className="flex-[0.3] bg-card border-l border-border flex flex-col">
           <div className="p-4 border-b border-border">
             <div className="flex items-center space-x-2">
               <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
@@ -481,6 +502,28 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
           {/* Chat messages area */}
           <ScrollArea ref={scrollAreaRef} className="flex-1" style={{ maxHeight: 'calc(100vh - 200px)' }}>
             <div className="p-4 space-y-4 min-h-full">
+              {/* Preguntas preliminares - solo cuando no hay conversación del usuario */}
+              {messages.filter(msg => msg.sender === 'user').length === 0 && (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground text-center mb-4">
+                    Comienza con una de estas preguntas:
+                  </p>
+                  <div className="grid gap-2">
+                    {quickQuestions.map((question, index) => (
+                      <Button
+                        key={index}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleQuickQuestion(question)}
+                        disabled={isTyping || !sessionId}
+                        className="text-left justify-start text-xs h-auto py-2 px-3 text-muted-foreground hover:text-foreground border-muted hover:border-border"
+                      >
+                        {question}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {messages.map((message) => (
                 <div 
                   key={message.id} 
