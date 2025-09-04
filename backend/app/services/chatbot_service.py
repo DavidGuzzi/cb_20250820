@@ -6,6 +6,7 @@ from typing import Dict, Optional
 from app.chatbot import ABTestingChatbot
 from app.services.cache_service import query_cache
 from app.services.session_manager import session_manager
+from app.services.question_generator_service import question_generator_service
 import re
 
 class ChatbotService:
@@ -15,15 +16,9 @@ class ChatbotService:
         self.chatbots: Dict[str, ABTestingChatbot] = {}
         self.welcome_message = """¡Hola! 👋 Soy tu Asistente IA de Análisis de Datos.
 
-🏪 Tengo acceso completo a 8 puntos de venta (PDVs) distribuidos en 6 ciudades argentinas con datos detallados de los últimos 3 meses:
-• Revenue y ingresos por período
-• Flujo de visitantes y patrones
-• Tasas de conversión y métricas de performance
+🏪 Tengo acceso a 8 PDVs en 6 ciudades argentinas con datos de revenue, visitantes y conversiones de los últimos 3 meses.
 
-💡 Pregúntame cualquier cosa sobre tus datos, por ejemplo:
-"¿Cuántos PDVs tenemos?", "¿Cuál es el mejor PDV?", "Muéstrame el revenue por región"
-
-🚀 ¡Estoy listo para ayudarte a descubrir insights valiosos!"""
+💡 Puedes seleccionar una de las preguntas sugeridas abajo o escribir tu propia consulta."""
     
     def get_chatbot(self, session_id: str) -> ABTestingChatbot:
         """Get or create chatbot instance for session"""
@@ -35,10 +30,14 @@ class ChatbotService:
         """Start new chat session"""
         session_id = session_manager.create_session(user_email)
         
+        # Get initial suggested questions
+        initial_questions = question_generator_service.get_initial_questions()
+        
         return {
             'success': True,
             'session_id': session_id,
-            'welcome_message': self.welcome_message
+            'welcome_message': self.welcome_message,
+            'suggested_questions': initial_questions
         }
     
     def process_message(self, session_id: str, message: str) -> dict:
@@ -68,6 +67,9 @@ class ChatbotService:
             # Parse response for SQL and data
             parsed_response = self._parse_response(response_text)
             
+            # Generate follow-up questions
+            suggested_questions = self._generate_suggested_questions(session_id, message, response_text)
+            
             return {
                 'success': True,
                 'response': {
@@ -79,6 +81,7 @@ class ChatbotService:
                     'execution_time': execution_time,
                     'cached': parsed_response.get('cached', False),
                     'insights': self._generate_insights(parsed_response),
+                    'suggested_questions': suggested_questions,
                     'session_id': session_id
                 }
             }
@@ -145,6 +148,40 @@ class ChatbotService:
             insights['recommendations'].append('Revisar los datos para identificar tendencias')
         
         return insights
+    
+    def _generate_suggested_questions(self, session_id: str, user_question: str, bot_response: str) -> list:
+        """Generate suggested follow-up questions after bot response"""
+        try:
+            # Get conversation history
+            history_result = self.get_session_history(session_id)
+            if not history_result['success']:
+                return question_generator_service.get_initial_questions()
+            
+            history = history_result['history']
+            
+            # Build conversation context
+            conversation_context = []
+            for exchange in history:
+                conversation_context.append({'role': 'user', 'content': exchange['question']})
+                conversation_context.append({'role': 'assistant', 'content': exchange['answer']})
+            
+            # Add current exchange
+            conversation_context.append({'role': 'user', 'content': user_question})
+            conversation_context.append({'role': 'assistant', 'content': bot_response})
+            
+            # Generate questions
+            questions = question_generator_service.generate_follow_up_questions(
+                last_question=user_question,
+                last_response=bot_response,
+                conversation_history=conversation_context,
+                session_id=session_id
+            )
+            
+            return questions
+            
+        except Exception as e:
+            print(f"Error generating suggested questions: {e}")
+            return question_generator_service.get_initial_questions()
     
     def get_session_history(self, session_id: str) -> dict:
         """Get chat history for session"""

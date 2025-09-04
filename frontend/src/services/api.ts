@@ -72,6 +72,7 @@ class ApiService {
     success: boolean;
     session_id: string;
     welcome_message: string;
+    suggested_questions: string[];
   }> {
     return this.fetchApi('/api/chat/start', {
       method: 'POST',
@@ -96,6 +97,7 @@ class ApiService {
         recommendations: string[];
         related_questions: string[];
       };
+      suggested_questions: string[];
       session_id: string;
     };
   }> {
@@ -120,6 +122,21 @@ class ApiService {
     session_info: ChatSession;
   }> {
     return this.fetchApi(`/api/chat/history/${sessionId}`);
+  }
+
+  // Get suggested questions based on conversation context
+  async getSuggestedQuestions(sessionId: string): Promise<{
+    success: boolean;
+    questions: string[];
+    question_type: 'initial' | 'follow_up';
+    based_on_last_question?: string;
+  }> {
+    return this.fetchApi('/api/chat/suggested-questions', {
+      method: 'POST',
+      body: JSON.stringify({
+        session_id: sessionId,
+      }),
+    });
   }
 
   // Get analytics

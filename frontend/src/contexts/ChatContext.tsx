@@ -33,6 +33,11 @@ interface ChatContextType {
     total_queries?: number;
     avg_execution_time?: number;
   };
+  suggestedQuestions: string[];
+  suggestedQuestionsCount: number;
+  isInSuggestedMode: boolean;
+  sendSuggestedQuestion: (question: string) => Promise<void>;
+  refreshSuggestedQuestions: () => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);

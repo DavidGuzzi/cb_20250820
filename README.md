@@ -1,6 +1,6 @@
 # Chatbot para Análisis de Datos Retail
 
-Sistema completo de chatbot especializado en análisis de datos de puntos de venta (PDVs) con capacidades text-to-SQL, desarrollado con Flask backend y React frontend.
+Sistema completo de chatbot especializado en análisis de datos de puntos de venta (PDVs) con capacidades text-to-SQL, desarrollado con Flask backend y React frontend. Incluye sistema inteligente de preguntas sugeridas con IA.
 
 ## 🏗️ Arquitectura
 
@@ -11,6 +11,7 @@ Sistema completo de chatbot especializado en análisis de datos de puntos de ven
 - **Sistema de Sesiones** para manejo de conversaciones
 - **Cache in-memory** para optimizar consultas frecuentes
 - **Logging estructurado** para monitoreo y debugging
+- **🆕 Generador de Preguntas IA** con OpenAI GPT-3.5-turbo para preguntas contextuales
 
 ### Frontend (React + TypeScript)
 - **Interfaz moderna** con Tailwind CSS y shadcn/ui components
@@ -18,6 +19,7 @@ Sistema completo de chatbot especializado en análisis de datos de puntos de ven
 - **Persistencia local** de conversaciones
 - **Analytics en tiempo real** de performance del sistema
 - **Manejo de sesiones** con localStorage
+- **🆕 Sistema de Preguntas Sugeridas** con flujo inteligente y límites automáticos
 
 ### Datos
 - **8 PDVs** en 6 ciudades argentinas (Buenos Aires, Córdoba, Rosario, Mendoza, Tucumán, Santa Fe)
@@ -84,6 +86,7 @@ npm run dev
 - `POST /api/chat/start` - Iniciar sesión de chat
 - `POST /api/chat/message` - Enviar mensaje al chatbot
 - `GET /api/chat/history/{session_id}` - Obtener historial
+- `POST /api/chat/suggested-questions` - 🆕 Obtener preguntas sugeridas contextuales
 
 ### System
 - `GET /api/health` - Health check del sistema
@@ -135,6 +138,7 @@ SECRET_KEY=clave_secreta_segura
 
 ## 💬 Ejemplos de Uso
 
+### Preguntas Directas
 El chatbot puede responder preguntas como:
 
 - "¿Cuál es el PDV con mejor performance?"
@@ -144,6 +148,23 @@ El chatbot puede responder preguntas como:
 - "Muéstrame el top 3 de PDVs por revenue"
 - "¿Cuál es la tasa de conversión promedio por región?"
 
+### 🆕 Sistema de Preguntas Sugeridas
+Al iniciar una conversación, aparecen **4 preguntas iniciales** debajo del mensaje de bienvenida:
+- "¿Cuáles fueron los PDVs con mayor conversión este mes?"
+- "Muéstrame el análisis de revenue por ciudad"
+- "¿Qué experimentos A/B tuvieron mejor performance?"
+- "Comparar visitantes vs conversiones por región"
+
+**Flujo Inteligente:**
+1. Selecciona una pregunta → Bot responde + genera 4 nuevas preguntas contextuales
+2. Continúa hasta 4 preguntas máximo o escribe libremente
+3. Cada nueva sesión reinicia el modo de preguntas sugeridas
+
+**Ventajas:**
+- **Guía para usuarios nuevos** que no saben qué preguntar
+- **Preguntas contextuales** generadas por IA según la conversación
+- **Transición fluida** entre preguntas sugeridas y escritura libre
+
 ## 🔧 Desarrollo
 
 ### Estructura del proyecto
@@ -151,7 +172,7 @@ El chatbot puede responder preguntas como:
 ├── backend/                 # Flask API
 │   ├── app/
 │   │   ├── routes/         # API endpoints
-│   │   ├── services/       # Lógica de negocio
+│   │   ├── services/       # Lógica de negocio + 🆕 QuestionGeneratorService
 │   │   ├── utils/          # Utilidades (logging, etc)
 │   │   └── models/         # Schemas y modelos
 │   ├── requirements.txt    # Dependencias Python

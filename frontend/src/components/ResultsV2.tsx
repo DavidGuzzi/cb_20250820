@@ -53,7 +53,12 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
     isTyping,
     sessionId,
     sendMessage,
-    analytics
+    analytics,
+    suggestedQuestions,
+    suggestedQuestionsCount,
+    isInSuggestedMode,
+    sendSuggestedQuestion,
+    refreshSuggestedQuestions
   } = useChatContext();
 
   // Auto-scroll to bottom when new messages arrive
@@ -166,12 +171,12 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
     }, 100);
   };
 
-  const handleQuickQuestion = async (question: string) => {
+  const handleSuggestedQuestion = async (question: string) => {
     if (isTyping) return;
     
-    await sendMessage(question);
+    await sendSuggestedQuestion(question);
     
-    // Enfocar después de enviar pregunta rápida
+    // Enfocar después de enviar pregunta sugerida
     setTimeout(() => {
       if (inputRef.current) {
         inputRef.current.focus();
@@ -179,13 +184,6 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
     }, 100);
   };
 
-  // Preguntas preliminares sugeridas
-  const quickQuestions = [
-    "¿Cuáles fueron los PDVs con mayor conversión este mes?",
-    "Muéstrame el análisis de revenue por ciudad", 
-    "¿Qué experimentos A/B tuvieron mejor performance?",
-    "Comparar visitantes vs conversiones por región"
-  ];
 
   // Colores para el gráfico de torta
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
@@ -297,7 +295,7 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
       {/* Main Content */}
       <main className="flex h-[calc(100vh-81px)]">
         {/* Panel izquierdo - Resultados detallados */}
-        <div className="flex-[0.7] p-6 overflow-y-auto">
+        <div className="flex-1 p-6 overflow-y-auto">
           <Tabs defaultValue="overview" className="h-full flex flex-col">
             <TabsList className="grid w-full grid-cols-3 mb-4">
               <TabsTrigger value="overview">Resumen Final</TabsTrigger>
@@ -484,7 +482,7 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
         </div>
 
         {/* Panel derecho - Chatbot integrado */}
-        <div className="flex-[0.3] bg-card border-l border-border flex flex-col">
+        <div className="w-[35%] min-w-[450px] max-w-[35%] bg-card border-l border-border flex flex-col">
           <div className="p-4 border-b border-border">
             <div className="flex items-center space-x-2">
               <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
@@ -500,30 +498,8 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
           </div>
 
           {/* Chat messages area */}
-          <ScrollArea ref={scrollAreaRef} className="flex-1" style={{ maxHeight: 'calc(100vh - 200px)' }}>
-            <div className="p-4 space-y-4 min-h-full">
-              {/* Preguntas preliminares - solo cuando no hay conversación del usuario */}
-              {messages.filter(msg => msg.sender === 'user').length === 0 && (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground text-center mb-4">
-                    Comienza con una de estas preguntas:
-                  </p>
-                  <div className="grid gap-2">
-                    {quickQuestions.map((question, index) => (
-                      <Button
-                        key={index}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleQuickQuestion(question)}
-                        disabled={isTyping || !sessionId}
-                        className="text-left justify-start text-xs h-auto py-2 px-3 text-muted-foreground hover:text-foreground border-muted hover:border-border"
-                      >
-                        {question}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
+          <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-hidden" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+            <div className="p-4 space-y-4 min-h-full overflow-hidden">
               {messages.map((message) => (
                 <div 
                   key={message.id} 
@@ -537,8 +513,8 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
                         <Bot className="w-3 h-3 text-white" />
                       )}
                     </div>
-                    <div className="space-y-1">
-                      <div className={`px-3 py-2 rounded-lg text-sm ${message.sender === 'user' ? 'bg-primary text-white' : 'bg-muted text-foreground'}`}>
+                    <div className="space-y-1 overflow-hidden min-w-0">
+                      <div className={`px-3 py-2 rounded-lg text-sm break-words ${message.sender === 'user' ? 'bg-primary text-white' : 'bg-muted text-foreground'}`}>
                         {message.text}
                       </div>
                       
@@ -570,6 +546,44 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
                 </div>
               ))}
               
+              {/* Preguntas sugeridas - aparecen después del último mensaje del bot */}
+              {messages.length > 0 && 
+               messages[messages.length - 1]?.sender === 'bot' && 
+               !isTyping && 
+               isInSuggestedMode && 
+               suggestedQuestions.length > 0 && (
+                <div className="space-y-3 border-t border-border/50 pt-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground font-medium">
+                      {suggestedQuestionsCount === 0 
+                        ? "💡 Comienza con una de estas preguntas:"
+                        : `💡 Preguntas sugeridas (${suggestedQuestionsCount}/4)`
+                      }
+                    </p>
+                    {suggestedQuestionsCount >= 4 && (
+                      <p className="text-xs text-orange-600 dark:text-orange-400">
+                        Límite alcanzado - continúa escribiendo libremente
+                      </p>
+                    )}
+                  </div>
+                  <div className="grid gap-2">
+                    {suggestedQuestions.slice(0, 4).map((question, index) => (
+                      <Button
+                        key={index}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSuggestedQuestion(question)}
+                        disabled={isTyping || !sessionId || suggestedQuestionsCount >= 4}
+                        className="text-left justify-between items-start text-xs h-auto min-h-[44px] py-3 px-3 text-muted-foreground hover:text-foreground border-muted hover:border-primary/30 hover:bg-primary/5 transition-all duration-200 w-full whitespace-normal"
+                      >
+                        <span className="flex-1 break-words pr-2 leading-relaxed">{question}</span>
+                        <span className="text-primary flex-shrink-0 ml-2">→</span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
               {isTyping && (
                 <div className="flex justify-start">
                   <div className="flex items-start space-x-2">
@@ -592,10 +606,42 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
 
           {/* Input area */}
           <div className="p-4 border-t border-border">
+            {/* Mode indicator */}
+            {isInSuggestedMode && suggestedQuestionsCount > 0 && suggestedQuestionsCount < 4 && (
+              <div className="mb-3 px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-primary font-medium">
+                      Modo preguntas sugeridas ({suggestedQuestionsCount}/4)
+                    </span>
+                  </div>
+                  <span className="text-muted-foreground">
+                    Selecciona arriba o escribe tu pregunta
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Switched to free mode */}
+            {!isInSuggestedMode && suggestedQuestionsCount > 0 && (
+              <div className="mb-3 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+                <div className="flex items-center space-x-2 text-xs">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span className="text-green-600 dark:text-green-400 font-medium">
+                    Modo escritura libre activado
+                  </span>
+                </div>
+              </div>
+            )}
+            
             <div className="flex space-x-2">
               <Input
                 ref={inputRef}
-                placeholder="Pregunta sobre los datos de tiendas, experimentos, conversiones..."
+                placeholder={isInSuggestedMode && suggestedQuestionsCount < 4 
+                  ? "Escribe tu pregunta o usa las sugerencias de arriba..." 
+                  : "Pregunta sobre los datos de tiendas, experimentos, conversiones..."
+                }
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}

@@ -20,6 +20,11 @@ interface UseChatReturn {
     total_queries?: number;
     avg_execution_time?: number;
   };
+  suggestedQuestions: string[];
+  suggestedQuestionsCount: number;
+  isInSuggestedMode: boolean;
+  sendSuggestedQuestion: (question: string) => Promise<void>;
+  refreshSuggestedQuestions: () => Promise<void>;
 }
 
 export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
@@ -28,20 +33,32 @@ export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
   const [isTyping, setIsTyping] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState({});
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  const [suggestedQuestionsCount, setSuggestedQuestionsCount] = useState(0);
+  const [isInSuggestedMode, setIsInSuggestedMode] = useState(true);
 
-  // Save messages to localStorage whenever they change
+  // Save messages and suggested questions state to localStorage whenever they change
   useEffect(() => {
     if (messages.length > 0 && sessionId) {
       localStorage.setItem(`chat-messages-${userEmail}`, JSON.stringify(messages));
       localStorage.setItem(`chat-session-${userEmail}`, sessionId);
+      localStorage.setItem(`chat-suggested-questions-${userEmail}`, JSON.stringify(suggestedQuestions));
+      // Only persist suggested questions state if there has been interaction (count > 0)
+      if (suggestedQuestionsCount > 0) {
+        localStorage.setItem(`chat-questions-count-${userEmail}`, suggestedQuestionsCount.toString());
+        localStorage.setItem(`chat-suggested-mode-${userEmail}`, isInSuggestedMode.toString());
+      }
     }
-  }, [messages, sessionId, userEmail]);
+  }, [messages, sessionId, userEmail, suggestedQuestions, suggestedQuestionsCount, isInSuggestedMode]);
 
   // Load persisted messages and session on mount
   useEffect(() => {
     if (userEmail) {
       const savedMessages = localStorage.getItem(`chat-messages-${userEmail}`);
       const savedSessionId = localStorage.getItem(`chat-session-${userEmail}`);
+      const savedSuggestedQuestions = localStorage.getItem(`chat-suggested-questions-${userEmail}`);
+      const savedQuestionsCount = localStorage.getItem(`chat-questions-count-${userEmail}`);
+      const savedSuggestedMode = localStorage.getItem(`chat-suggested-mode-${userEmail}`);
       
       if (savedMessages) {
         try {
@@ -54,6 +71,23 @@ export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
       
       if (savedSessionId) {
         setSessionId(savedSessionId);
+      }
+      
+      if (savedSuggestedQuestions) {
+        try {
+          const parsedQuestions = JSON.parse(savedSuggestedQuestions);
+          setSuggestedQuestions(parsedQuestions);
+        } catch (error) {
+          console.warn('Failed to parse saved suggested questions:', error);
+        }
+      }
+      
+      if (savedQuestionsCount) {
+        setSuggestedQuestionsCount(parseInt(savedQuestionsCount, 10) || 0);
+      }
+      
+      if (savedSuggestedMode) {
+        setIsInSuggestedMode(savedSuggestedMode === 'true');
       }
     }
   }, [userEmail]);
@@ -80,6 +114,17 @@ export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
           const session = await apiService.startChatSession(userEmail);
           console.log('🆕 Session created:', session);
           setSessionId(session.session_id);
+
+          // Reset suggested questions state for new session
+          setSuggestedQuestionsCount(0);
+          setIsInSuggestedMode(true);
+          localStorage.removeItem(`chat-questions-count-${userEmail}`);
+          localStorage.removeItem(`chat-suggested-mode-${userEmail}`);
+
+          // Set initial suggested questions
+          if (session.suggested_questions) {
+            setSuggestedQuestions(session.suggested_questions);
+          }
 
           // Add welcome message only if we don't have persisted messages
           if (messages.length === 0) {
@@ -108,7 +153,7 @@ export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
     if (userEmail && !sessionId) {
       initializeChat();
     }
-  }, [userEmail, sessionId, messages.length]); // Added sessionId and messages.length as dependencies
+  }, [userEmail, sessionId, messages.length, onError]); // Removed resetSuggestedQuestionsState to avoid infinite loop
 
   // Send message function
   const sendMessage = useCallback(async (messageText: string) => {
@@ -131,6 +176,11 @@ export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
     setMessages(prev => [...prev, userMessage]);
     setIsTyping(true);
 
+    // If user types manually and has used suggested questions, switch to free mode
+    if (suggestedQuestionsCount > 0) {
+      setIsInSuggestedMode(false);
+    }
+
     try {
       // Send to backend
       const response = await apiService.sendMessage(sessionId, messageText);
@@ -151,6 +201,11 @@ export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
         };
 
         setMessages(prev => [...prev, botMessage]);
+
+        // Update suggested questions from response
+        if (response.response.suggested_questions) {
+          setSuggestedQuestions(response.response.suggested_questions);
+        }
 
         // Update analytics
         setAnalytics(prev => ({
@@ -188,8 +243,14 @@ export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
   const clearConversation = useCallback(() => {
     setMessages([]);
     setSessionId(null);
+    setSuggestedQuestions([]);
+    setSuggestedQuestionsCount(0);
+    setIsInSuggestedMode(true);
     localStorage.removeItem(`chat-messages-${userEmail}`);
     localStorage.removeItem(`chat-session-${userEmail}`);
+    localStorage.removeItem(`chat-suggested-questions-${userEmail}`);
+    localStorage.removeItem(`chat-questions-count-${userEmail}`);
+    localStorage.removeItem(`chat-suggested-mode-${userEmail}`);
   }, [userEmail]);
 
   // Load analytics periodically
@@ -217,6 +278,37 @@ export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
     return () => clearInterval(interval);
   }, [sessionId]);
 
+  // Send a suggested question with tracking
+  const sendSuggestedQuestion = useCallback(async (question: string) => {
+    if (!sessionId || !question.trim() || isTyping) return;
+    
+    // Increment suggested questions count
+    const newCount = suggestedQuestionsCount + 1;
+    setSuggestedQuestionsCount(newCount);
+    
+    // Check if we've reached the limit of 4 suggested questions
+    if (newCount >= 4) {
+      setIsInSuggestedMode(false);
+    }
+    
+    // Send the message normally
+    await sendMessage(question);
+  }, [sessionId, isTyping, suggestedQuestionsCount, sendMessage]);
+
+  // Refresh suggested questions manually
+  const refreshSuggestedQuestions = useCallback(async () => {
+    if (!sessionId) return;
+    
+    try {
+      const response = await apiService.getSuggestedQuestions(sessionId);
+      if (response.success) {
+        setSuggestedQuestions(response.questions);
+      }
+    } catch (error) {
+      console.warn('Failed to refresh suggested questions:', error);
+    }
+  }, [sessionId]);
+
   return {
     messages,
     isLoading,
@@ -226,5 +318,10 @@ export function useChat({ userEmail, onError }: UseChatOptions): UseChatReturn {
     clearMessages,
     clearConversation,
     analytics,
+    suggestedQuestions,
+    suggestedQuestionsCount,
+    isInSuggestedMode,
+    sendSuggestedQuestion,
+    refreshSuggestedQuestions,
   };
 }

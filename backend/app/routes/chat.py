@@ -3,6 +3,7 @@ Chat API endpoints
 """
 from flask import Blueprint, request, jsonify
 from app.services.chatbot_service import chatbot_service
+from app.services.question_generator_service import question_generator_service
 
 chat_bp = Blueprint('chat', __name__)
 
@@ -86,6 +87,74 @@ def get_chat_history(session_id):
         result = chatbot_service.get_session_history(session_id)
         
         return jsonify(result), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Internal server error: {str(e)}'
+        }), 500
+
+@chat_bp.route('/api/chat/suggested-questions', methods=['POST'])
+def get_suggested_questions():
+    """Get contextual follow-up questions based on conversation history"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Request body is required'
+            }), 400
+        
+        session_id = data.get('session_id')
+        
+        if not session_id:
+            return jsonify({
+                'success': False,
+                'error': 'session_id is required'
+            }), 400
+        
+        # Get conversation history
+        history_result = chatbot_service.get_session_history(session_id)
+        if not history_result['success']:
+            return jsonify(history_result), 400
+        
+        history = history_result['history']
+        
+        # If no conversation history, return initial questions
+        if not history:
+            questions = question_generator_service.get_initial_questions()
+            return jsonify({
+                'success': True,
+                'questions': questions,
+                'question_type': 'initial'
+            }), 200
+        
+        # Get last exchange
+        last_exchange = history[-1]
+        last_question = last_exchange['question']
+        last_response = last_exchange['answer']
+        
+        # Build conversation history for context
+        conversation_context = []
+        for exchange in history:
+            conversation_context.append({'role': 'user', 'content': exchange['question']})
+            conversation_context.append({'role': 'assistant', 'content': exchange['answer']})
+        
+        # Generate follow-up questions
+        questions = question_generator_service.generate_follow_up_questions(
+            last_question=last_question,
+            last_response=last_response,
+            conversation_history=conversation_context,
+            session_id=session_id
+        )
+        
+        return jsonify({
+            'success': True,
+            'questions': questions,
+            'question_type': 'follow_up',
+            'based_on_last_question': last_question
+        }), 200
         
     except Exception as e:
         return jsonify({
