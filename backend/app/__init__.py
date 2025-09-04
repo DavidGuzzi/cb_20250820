@@ -25,10 +25,18 @@ def create_app():
     
     # Smart CORS configuration for local and cloud
     env = os.getenv('FLASK_ENV', 'development')
-    if env == 'production':
-        # Cloud Run production
+    port = os.getenv('PORT')  # Cloud Run sets this automatically
+    
+    # Cloud Run detection: check if PORT env var exists (Cloud Run specific)
+    if port or env == 'production':
+        # Cloud Run production - allow both specific frontend and wildcard for flexibility
         frontend_url = os.getenv('FRONTEND_URL', 'https://retail-frontend-945253268443.us-central1.run.app')
-        allowed_origins = [frontend_url]
+        allowed_origins = [
+            frontend_url,
+            'https://retail-frontend-945253268443.us-central1.run.app',
+            'http://localhost:5173',  # Still allow local for testing
+            'http://127.0.0.1:5173'
+        ]
     else:
         # Local development
         allowed_origins = ['http://localhost:5173', 'http://127.0.0.1:5173']
