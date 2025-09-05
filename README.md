@@ -165,6 +165,28 @@ Al iniciar una conversación, aparecen **4 preguntas iniciales** debajo del mens
 - **Preguntas contextuales** generadas por IA según la conversación
 - **Transición fluida** entre preguntas sugeridas y escritura libre
 
+## 🎨 Mejoras de UI/UX del Chatbot
+
+### Interfaz Visual Mejorada
+- **Iconos con Gradientes**: Bot con gradiente azul-púrpura, Usuario con gradiente naranja-rojo y ícono de estrella
+- **Animaciones Sutiles**: Ícono del bot pulsa durante escritura, indicador de conexión con pulso verde
+- **Branding Profesional**: Esquema de colores consistente y identidad visual moderna
+- **Burbujas de Mensaje Mejoradas**: Gradientes, sombras y efectos hover para mejor experiencia
+- **Indicador de Escritura**: Puntos que rebotan con colores que coinciden con la marca del bot
+
+### Sistema de Foco Inteligente
+- **Auto-Focus Durante Conversación**: El input mantiene el foco automáticamente durante intercambios activos
+- **Navegación Respetuosa**: Permite navegación normal por la UI sin robar foco agresivamente
+- **Detección de Área de Chat**: Solo enfoca cuando se interactúa dentro del área de chat
+- **Gestión Optimizada**: Usa `requestAnimationFrame` y event listeners minimalistas para mejor rendimiento
+- **Fix Técnico**: Implementación correcta de `React.forwardRef` en componente Input para manejo confiable de referencias
+
+### Experiencia de Usuario Mejorada
+- **Foco Contextual**: Se mantiene enfocado solo cuando es apropiado (después de enviar/recibir mensajes)
+- **Interacciones Naturales**: Permite clicks en botones, navegación por header sin interferencia
+- **Scroll Optimizado**: Scroll instantáneo durante conversación para evitar conflictos con el foco
+- **Retroalimentación Visual**: Transiciones suaves y feedback inmediato para mejor experiencia
+
 ## 🔧 Desarrollo
 
 ### Estructura del proyecto

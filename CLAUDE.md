@@ -205,6 +205,30 @@ The chatbot now includes an advanced suggested questions system with contextual 
 - **Fixed Width Chat**: 35% viewport width (min 450px) to prevent layout shifts
 - **Smooth Transitions**: Hover effects and visual feedback for better UX
 
+### Enhanced Chatbot UI & UX
+
+The chatbot interface has been significantly improved for better user experience:
+
+#### **Visual Enhancements:**
+- **Gradient Icons**: Bot uses blue-purple gradient with Bot icon, User uses orange-red gradient with Star icon
+- **Animated Elements**: Bot icon pulses during typing, connection status indicator with green pulse
+- **Improved Branding**: Consistent color scheme and professional visual identity
+- **Message Styling**: Enhanced message bubbles with gradients, shadows, and hover effects
+- **Typing Indicator**: Colorful bouncing dots matching the bot's brand colors
+
+#### **Smart Focus Management:**
+- **Intelligent Auto-Focus**: Input maintains focus during active conversations
+- **Conversation Flow Focus**: Automatic focus after sending messages and receiving responses  
+- **Respectful Navigation**: Allows natural UI navigation without aggressive focus stealing
+- **Chat Area Detection**: Focus only when interacting within chat area (`data-chat-area`)
+- **React.forwardRef Fix**: Proper ref handling for Input component ensures focus system works reliably
+
+#### **Technical Implementation:**
+- **RequestAnimationFrame**: Uses modern animation frame timing for smooth focus transitions
+- **Event Listener Optimization**: Minimal, targeted event listeners for better performance
+- **Focus State Management**: Tracks conversation state to determine appropriate focus behavior
+- **Anti-Pattern Prevention**: Prevents focus conflicts with scroll animations and UI interactions
+
 ## Environment Variables
 
 ### Local Development (.env.local):
