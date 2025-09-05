@@ -20,7 +20,13 @@ import {
   Sun,
   Moon,
   BarChart3,
-  MessageSquare 
+  MessageSquare,
+  Brain,
+  Sparkles,
+  UserCircle,
+  Crown,
+  Star,
+  UserCheck
 } from 'lucide-react';
 import { useChatContext } from '../contexts/ChatContext';
 import { apiService } from '../services/api';
@@ -61,36 +67,32 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
     refreshSuggestedQuestions
   } = useChatContext();
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll simplificado sin interferir con el foco
   useEffect(() => {
     const scrollToBottom = () => {
       if (scrollAreaRef.current) {
-        // Find the scroll viewport within our ScrollArea component
         const scrollViewport = scrollAreaRef.current.querySelector('[data-slot="scroll-area-viewport"]');
         if (scrollViewport) {
-          // Use a longer timeout to ensure content has been rendered
-          setTimeout(() => {
-            scrollViewport.scrollTo({
-              top: scrollViewport.scrollHeight,
-              behavior: 'smooth'
-            });
-          }, 200);
-        } else {
-          // Fallback: try with messagesEndRef
-          if (messagesEndRef.current) {
-            setTimeout(() => {
-              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }, 200);
-          }
+          // Scroll instantáneo para evitar conflictos con animaciones
+          scrollViewport.scrollTo({
+            top: scrollViewport.scrollHeight,
+            behavior: 'auto' // Cambié de 'smooth' a 'auto'
+          });
+        } else if (messagesEndRef.current) {
+          // Fallback también instantáneo
+          messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
         }
       }
     };
     
-    // Scroll on new messages or when typing indicator changes
-    if (messages.length > 0 || isTyping) {
-      scrollToBottom();
+    // Solo hacer scroll, sin manejar foco aquí
+    if (messages.length > 0) {
+      // Usar requestAnimationFrame para scroll después del render
+      requestAnimationFrame(() => {
+        requestAnimationFrame(scrollToBottom);
+      });
     }
-  }, [messages.length, isTyping]); // Watch messages.length instead of messages array to avoid excessive re-renders
+  }, [messages.length]);
 
   // Cargar datos del gráfico
   useEffect(() => {
@@ -115,60 +117,98 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
     loadChartData();
   }, [chartType]);
 
-  // Mantener el input enfocado
+  // Enfocar input solo después de carga inicial (una vez)
   useEffect(() => {
-    const focusInput = () => {
-      if (inputRef.current && !isTyping && !document.activeElement?.closest('.scroll-area')) {
-        inputRef.current.focus();
-      }
-    };
-
-    // Enfocar con un delay más largo para asegurar que el DOM esté listo
-    const timer = setTimeout(focusInput, 300);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [isTyping, messages.length]);
-
-  // Enfocar cuando cambie el estado de typing
-  useEffect(() => {
-    if (!isTyping && inputRef.current) {
+    if (messages.length > 0 && inputRef.current && !isTyping) {
       const timer = setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
         }
-      }, 500); // Delay mayor para después de que termine de escribir
+      }, 300);
 
       return () => clearTimeout(timer);
     }
-  }, [isTyping]);
+  }, [messages.length === 1]); // Solo cuando aparece el primer mensaje (bienvenida)
 
-  // Enfocar al hacer click en cualquier parte del área de chat (excepto el scroll)
+  // Enfocar cuando el bot termine de escribir usando requestAnimationFrame
   useEffect(() => {
-    const handleChatClick = (e: MouseEvent) => {
+    if (!isTyping && inputRef.current && messages.length > 0) {
+      let rafId: number;
+      
+      const focusAfterTyping = () => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      };
+      
+      // Usar múltiples requestAnimationFrame para asegurar que el DOM esté listo
+      rafId = requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(focusAfterTyping);
+        });
+      });
+
+      return () => {
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+        }
+      };
+    }
+  }, [isTyping, messages.length]);
+
+  // Click dentro del área de chat para enfocar (comportamiento normal)
+  useEffect(() => {
+    const handleChatAreaClick = (e: MouseEvent) => {
       const target = e.target as Element;
-      if (target && !target.closest('input') && !target.closest('button') && inputRef.current) {
+      
+      // Solo enfocar si se hace click dentro del área de chat, no en botones
+      if (target && 
+          target.closest('[data-chat-area]') && 
+          !target.closest('button') && 
+          !target.closest('input') &&
+          inputRef.current) {
         inputRef.current.focus();
       }
     };
 
-    document.addEventListener('click', handleChatClick);
-    return () => document.removeEventListener('click', handleChatClick);
+    document.addEventListener('click', handleChatAreaClick);
+    
+    return () => {
+      document.removeEventListener('click', handleChatAreaClick);
+    };
   }, []);
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isTyping) return;
     
-    await sendMessage(inputMessage);
+    const messageToSend = inputMessage;
+    
+    // PASO 1: Mantener foco INMEDIATAMENTE antes de cualquier operación
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+    
+    // PASO 2: Limpiar input
     setInputMessage('');
     
-    // Enfocar explícitamente después de enviar
-    setTimeout(() => {
-      if (inputRef.current) {
+    // PASO 3: Foco inmediato después de limpiar
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+    
+    // PASO 4: Enviar mensaje (async)
+    await sendMessage(messageToSend);
+    
+    // PASO 5: Refocus usando requestAnimationFrame (más confiable)
+    const refocus = () => {
+      if (inputRef.current && !isTyping) {
         inputRef.current.focus();
       }
-    }, 100);
+    };
+    
+    requestAnimationFrame(refocus);
+    requestAnimationFrame(() => requestAnimationFrame(refocus));
+    requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(refocus)));
   };
 
   const handleSuggestedQuestion = async (question: string) => {
@@ -482,16 +522,19 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
         </div>
 
         {/* Panel derecho - Chatbot integrado */}
-        <div className="w-[35%] min-w-[450px] max-w-[35%] bg-card border-l border-border flex flex-col">
+        <div className="w-[35%] min-w-[450px] max-w-[35%] bg-card border-l border-border flex flex-col" data-chat-area>
           <div className="p-4 border-b border-border">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                <Bot className="w-4 h-4 text-white" />
+              <div className="relative">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
+                  <Bot className="w-4 h-4 text-white" />
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-card animate-pulse"></div>
               </div>
               <div>
                 <h3 className="font-semibold text-foreground">Asistente de Datos IA</h3>
                 <p className="text-xs text-muted-foreground">
-                  Conectado a base de datos real • Memoria conversacional
+                  🟢 Conectado • Base de datos real • Memoria conversacional
                 </p>
               </div>
             </div>
@@ -506,15 +549,23 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
                   className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div className={`flex items-start space-x-2 max-w-[85%] ${message.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${message.sender === 'user' ? 'bg-primary' : 'bg-secondary'}`}>
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm ${
+                      message.sender === 'user' 
+                        ? 'bg-gradient-to-br from-orange-500 to-red-500' 
+                        : 'bg-gradient-to-br from-blue-500 to-purple-600'
+                    }`}>
                       {message.sender === 'user' ? (
-                        <User className="w-3 h-3 text-white" />
+                        <UserCheck className="w-3 h-3 text-white" />
                       ) : (
-                        <Bot className="w-3 h-3 text-white" />
+                        <Bot className="w-3 h-3 text-white animate-pulse" />
                       )}
                     </div>
                     <div className="space-y-1 overflow-hidden min-w-0">
-                      <div className={`px-3 py-2 rounded-lg text-sm break-words ${message.sender === 'user' ? 'bg-primary text-white' : 'bg-muted text-foreground'}`}>
+                      <div className={`px-3 py-2 rounded-lg text-sm break-words transition-all duration-200 ${
+                        message.sender === 'user' 
+                          ? 'bg-primary text-white shadow-md' 
+                          : 'bg-muted text-foreground hover:bg-muted/80'
+                      }`}>
                         {message.text}
                       </div>
                       
@@ -587,14 +638,14 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
               {isTyping && (
                 <div className="flex justify-start">
                   <div className="flex items-start space-x-2">
-                    <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center">
-                      <Bot className="w-3 h-3 text-white" />
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-sm">
+                      <Bot className="w-3 h-3 text-white animate-pulse" />
                     </div>
-                    <div className="px-3 py-2 rounded-lg bg-muted">
+                    <div className="px-3 py-2 rounded-lg bg-muted border border-border/50">
                       <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                       </div>
                     </div>
                   </div>
@@ -644,7 +695,12 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
                 }
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
                 className="flex-1 text-sm"
                 disabled={isTyping || !sessionId}
               />
