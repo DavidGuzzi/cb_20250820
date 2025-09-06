@@ -35,6 +35,9 @@ class JSONFormatter(logging.Formatter):
                 # Add session ID if available
                 if hasattr(g, 'session_id'):
                     log_entry['session_id'] = g.session_id
+                # Add request ID if available
+                if hasattr(g, 'request_id'):
+                    log_entry['request_id'] = g.request_id
         except RuntimeError:
             # Outside request context
             pass

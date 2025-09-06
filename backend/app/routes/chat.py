@@ -1,7 +1,7 @@
 """
 Chat API endpoints
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from app.services.chatbot_service import chatbot_service
 from app.services.question_generator_service import question_generator_service
 
@@ -64,6 +64,9 @@ def send_message():
                 'error': 'message cannot be empty'
             }), 400
         
+        # Attach session_id to request context for logging
+        g.session_id = session_id
+
         result = chatbot_service.process_message(session_id, message.strip())
         
         return jsonify(result), 200
@@ -84,6 +87,9 @@ def get_chat_history(session_id):
                 'error': 'session_id is required'
             }), 400
         
+        # Attach session_id to request context for logging
+        g.session_id = session_id
+
         result = chatbot_service.get_session_history(session_id)
         
         return jsonify(result), 200
@@ -114,6 +120,9 @@ def get_suggested_questions():
                 'error': 'session_id is required'
             }), 400
         
+        # Attach session_id to request context for logging
+        g.session_id = session_id
+
         # Get conversation history
         history_result = chatbot_service.get_session_history(session_id)
         if not history_result['success']:
