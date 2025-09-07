@@ -1,11 +1,14 @@
 """
-Service for generating contextual follow-up questions using OpenAI
+Service for generating contextual follow-up questions using OpenAI Responses API
 """
-import openai
 import json
+import re
 import time
 from typing import List, Dict, Optional
+from openai import OpenAI
+from app.config import Config
 from app.services.cache_service import query_cache
+import logging
 
 class QuestionGeneratorService:
     """Service for generating intelligent follow-up questions based on conversation context"""
@@ -13,6 +16,7 @@ class QuestionGeneratorService:
     def __init__(self):
         self.cache_prefix = "questions_"
         self.cache_ttl = 1800  # 30 minutes
+        self.client = OpenAI()
         
         # Base questions for different contexts
         self.base_questions = {
@@ -95,59 +99,69 @@ class QuestionGeneratorService:
         last_response: str, 
         conversation_history: List[Dict]
     ) -> List[str]:
-        """Generate questions using OpenAI based on conversation context"""
-        
+        """Generate questions using OpenAI Responses API based on conversation context"""
         # Build conversation context
         context = self._build_context(conversation_history, last_question, last_response)
-        
-        system_prompt = """
-        Eres un experto analista de datos retail que ayuda a generar preguntas de seguimiento inteligentes.
-        
-        Tu tarea es generar exactamente 4 preguntas de seguimiento que:
-        1. Sean relevantes al contexto de la conversación sobre datos de PDVs, revenue, conversiones
-        2. Profundicen en el análisis anterior
-        3. Abran nuevas líneas de investigación relacionadas
-        4. Sean específicas y accionables
-        
-        Contexto de datos disponibles:
-        - 8 PDVs en 6 ciudades argentinas (Buenos Aires, Córdoba, Rosario, Mendoza, Tucumán, Santa Fe)
-        - Datos de revenue, visitantes, conversiones por mes
-        - Análisis por región, ciudad, tipo de PDV
-        
-        Responde SOLO con un JSON array con 4 preguntas, ejemplo:
-        ["¿Pregunta 1?", "¿Pregunta 2?", "¿Pregunta 3?", "¿Pregunta 4?"]
-        """
-        
-        user_prompt = f"""
-        Conversación actual:
-        {context}
-        
-        Última pregunta del usuario: "{last_question}"
-        Última respuesta del asistente: "{last_response[:500]}..."
-        
-        Genera 4 preguntas de seguimiento inteligentes y específicas.
-        """
-        
-        response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.7,
-            max_tokens=300,
-            timeout=10
-        )
-        
-        # Parse the JSON response
-        questions_text = response.choices[0].message.content.strip()
-        questions = json.loads(questions_text)
-        
-        # Validate and clean
-        if isinstance(questions, list) and len(questions) >= 3:
-            return questions[:4]  # Take first 4
-        else:
-            raise ValueError("Invalid response format from OpenAI")
+
+        prompt = f"""
+Eres un experto analista de datos retail que genera preguntas de seguimiento inteligentes.
+
+Requisitos:
+1) Relevantes al contexto sobre PDVs, revenue, conversiones
+2) Profundicen en el análisis anterior y abran nuevas líneas
+3) Sean específicas y accionables
+
+Contexto de datos disponibles:
+- 8 PDVs en 6 ciudades argentinas (Buenos Aires, Córdoba, Rosario, Mendoza, Tucumán, Santa Fe)
+- Métricas: revenue, visitantes, conversiones por mes
+- Análisis por región, ciudad, tipo de PDV
+
+Conversación actual:
+{context}
+
+Última pregunta del usuario: "{last_question}"
+Última respuesta del asistente: "{last_response[:500]}..."
+
+Devuelve EXCLUSIVAMENTE un JSON array con 4 strings, por ejemplo:
+["¿Pregunta 1?", "¿Pregunta 2?", "¿Pregunta 3?", "¿Pregunta 4?"]
+"""
+
+        # Call Responses API
+        model = getattr(Config, 'OPENAI_MODEL', None) or "gpt-4o-mini"
+
+        # Simple retry once for transient errors
+        last_err = None
+        logger = logging.getLogger('chatbot_app.openai')
+        for _ in range(2):
+            try:
+                t0 = time.time()
+                resp = self.client.responses.create(
+                    model=model,
+                    input=prompt,
+                    temperature=0.7,
+                    max_output_tokens=300,
+                    timeout=10
+                )
+                logger.info("OpenAI follow-up questions finished", extra={
+                    'extra_fields': {
+                        'event': 'openai_questions',
+                        'model': model,
+                        'latency_ms': round((time.time() - t0) * 1000, 2)
+                    }
+                })
+                text = resp.output_text.strip()
+                # Try to parse JSON; if not pure JSON, extract JSON array
+                try:
+                    return self._validate_questions(json.loads(text))
+                except Exception:
+                    match = re.search(r"\[(?:.|\n)*\]", text)
+                    if match:
+                        return self._validate_questions(json.loads(match.group(0)))
+                    raise ValueError("Model did not return a valid JSON array")
+            except Exception as e:
+                last_err = e
+                time.sleep(0.5)
+        raise RuntimeError(f"OpenAI Responses error: {last_err}")
     
     def _generate_rule_based(self, last_question: str, last_response: str) -> List[str]:
         """Fallback rule-based question generation"""
@@ -198,6 +212,14 @@ class QuestionGeneratorService:
     def get_initial_questions(self) -> List[str]:
         """Get the initial set of questions for new conversations"""
         return self.base_questions['initial']
+
+    def _validate_questions(self, questions: List[str]) -> List[str]:
+        """Validate and normalize questions list"""
+        if isinstance(questions, list) and len(questions) >= 3:
+            # Ensure all items are strings
+            cleaned = [str(q).strip() for q in questions if str(q).strip()]
+            return cleaned[:4]
+        raise ValueError("Invalid questions array")
     
     def get_questions_by_category(self, category: str) -> List[str]:
         """Get questions for a specific category"""

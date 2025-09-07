@@ -5,6 +5,8 @@ from app.data_store import DataStore
 from app.sql_engine import SQLEngine
 import json
 import re
+import time
+import logging
 
 class ABTestingChatbot:
     def __init__(self):
@@ -17,10 +19,18 @@ class ABTestingChatbot:
     def get_response(self, user_message: str) -> str:
         """Obtiene respuesta del chatbot usando Responses API"""
         try:
+            logger = logging.getLogger('chatbot_app.chatbot')
+            openai_logger = logging.getLogger('chatbot_app.openai')
+            sql_logger = logging.getLogger('chatbot_app.sql')
             # Añadir mensaje del usuario a la memoria
             self.memory.add_message("user", user_message)
             
-            print(f"🔄 Processing message: {user_message[:50]}...")
+            logger.info("Processing user message", extra={
+                'extra_fields': {
+                    'event': 'chatbot_process',
+                    'message_preview': user_message[:100]
+                }
+            })
             
             # Preparar contexto completo
             system_context = self.memory.system_prompt
@@ -60,28 +70,69 @@ USUARIO: {user_message}
 ASISTENTE:"""
             
             # Usar la Responses API de OpenAI
-            print(f"🤖 Sending to OpenAI Responses API...")
-            response = self.client.responses.create(
-                model=Config.OPENAI_MODEL,
-                input=enhanced_input
-            )
-            
-            print(f"📥 Response received from OpenAI")
+            openai_logger.info("Calling OpenAI Responses API", extra={
+                'extra_fields': {
+                    'event': 'openai_call_start'
+                }
+            })
+            # Unified call options with simple retry
+            model = getattr(Config, 'OPENAI_MODEL', None) or "gpt-4o-mini"
+            last_err = None
+            response = None
+            t0 = time.time()
+            for _ in range(2):
+                try:
+                    response = self.client.responses.create(
+                        model=model,
+                        input=enhanced_input,
+                        temperature=0.7,
+                        max_output_tokens=1200,
+                        timeout=10
+                    )
+                    break
+                except Exception as e:
+                    last_err = e
+                    time.sleep(0.5)
+            if last_err and not response:
+                raise last_err
+            openai_logger.info("OpenAI call finished", extra={
+                'extra_fields': {
+                    'event': 'openai_call_end',
+                    'model': model,
+                    'latency_ms': round((time.time() - t0) * 1000, 2)
+                }
+            })
             assistant_message = response.output_text
             
             # Detectar y ejecutar consultas SQL
             sql_executed = False
             if "```sql" in assistant_message:
-                print(f"🔍 SQL detected in response, executing...")
+                sql_logger.info("SQL block detected in LLM response", extra={
+                    'extra_fields': {
+                        'event': 'sql_detected'
+                    }
+                })
                 sql_results = self._execute_sql_from_response(assistant_message)
                 if sql_results:
                     assistant_message = sql_results
                     sql_executed = True
-                    print(f"✅ SQL executed successfully, response updated")
+                    sql_logger.info("SQL executed and response updated", extra={
+                        'extra_fields': {
+                            'event': 'sql_executed'
+                        }
+                    })
                 else:
-                    print(f"⚠️ SQL execution failed or no results")
+                    sql_logger.warning("SQL execution failed or no results", extra={
+                        'extra_fields': {
+                            'event': 'sql_failed'
+                        }
+                    })
             else:
-                print(f"ℹ️ No SQL query detected in response")
+                logger.info("No SQL query detected in response", extra={
+                    'extra_fields': {
+                        'event': 'sql_not_detected'
+                    }
+                })
             
             # Añadir respuesta a la memoria
             self.memory.add_message("assistant", assistant_message)
@@ -93,6 +144,7 @@ ASISTENTE:"""
     
     def _execute_sql_from_response(self, response_text):
         """Extrae y ejecuta consultas SQL de la respuesta del LLM"""
+        logger = logging.getLogger('chatbot_app.sql')
         # Extraer consulta SQL
         sql_pattern = r'```sql\s*(.*?)\s*```'
         matches = re.findall(sql_pattern, response_text, re.DOTALL | re.IGNORECASE)
@@ -101,14 +153,27 @@ ASISTENTE:"""
             return None
         
         sql_query = matches[0].strip()
-        print(f"🔍 Executing SQL: {sql_query}")
+        logger.info("Executing SQL", extra={
+            'extra_fields': {
+                'event': 'sql_execute',
+                'query_preview': sql_query[:120]
+            }
+        })
         
         # Ejecutar consulta
+        t0 = time.time()
         result = self.sql_engine.execute_query(sql_query)
+        latency_ms = round((time.time() - t0) * 1000, 2)
         
         if result['success']:
             data = result.get('data', [])
-            print(f"📊 SQL returned {len(data)} rows")
+            logger.info("SQL executed successfully", extra={
+                'extra_fields': {
+                    'event': 'sql_success',
+                    'row_count': len(data),
+                    'latency_ms': latency_ms
+                }
+            })
             
             # Remover el bloque SQL de la respuesta original
             clean_response = re.sub(r'```sql.*?```', '', response_text, flags=re.DOTALL | re.IGNORECASE).strip()
@@ -119,12 +184,19 @@ ASISTENTE:"""
             else:
                 return clean_response + "\n\nNo encontré datos que coincidan con tu consulta."
         else:
-            print(f"❌ SQL execution failed: {result.get('error', 'Unknown error')}")
+            logger.error("SQL execution failed", extra={
+                'extra_fields': {
+                    'event': 'sql_error',
+                    'error': result.get('error', 'Unknown error'),
+                    'latency_ms': latency_ms
+                }
+            })
             return response_text + f"\n\nLo siento, no pude obtener esa información en este momento."
     
     def _reformulate_response_with_data(self, original_response, sql_query, data):
         """Usa el LLM para reformular la respuesta con los datos reales"""
         try:
+            openai_logger = logging.getLogger('chatbot_app.openai')
             # Convertir datos a formato legible
             data_summary = f"Datos obtenidos de la consulta SQL:\n"
             for i, row in enumerate(data[:10]):  # Máximo 10 filas para el contexto
@@ -148,15 +220,42 @@ INSTRUCCIONES:
 
 RESPUESTA REFORMULADA:"""
 
-            response = self.client.responses.create(
-                model=Config.OPENAI_MODEL,
-                input=reformulation_prompt
-            )
+            model = getattr(Config, 'OPENAI_MODEL', None) or "gpt-4o-mini"
+            last_err = None
+            response = None
+            t0 = time.time()
+            for _ in range(2):
+                try:
+                    response = self.client.responses.create(
+                        model=model,
+                        input=reformulation_prompt,
+                        temperature=0.7,
+                        max_output_tokens=600,
+                        timeout=10
+                    )
+                    break
+                except Exception as e:
+                    last_err = e
+                    time.sleep(0.5)
+            if not response:
+                raise last_err if last_err else RuntimeError("OpenAI Responses error")
+            openai_logger.info("OpenAI reformulation finished", extra={
+                'extra_fields': {
+                    'event': 'openai_reformulate',
+                    'model': model,
+                    'latency_ms': round((time.time() - t0) * 1000, 2)
+                }
+            })
             
             return response.output_text
             
         except Exception as e:
-            print(f"Error in reformulation: {e}")
+            logging.getLogger('chatbot_app.chatbot').error("Error in reformulation", extra={
+                'extra_fields': {
+                    'event': 'openai_reformulate_error',
+                    'error': str(e)
+                }
+            })
             # Fallback: respuesta simple con datos básicos
             if len(data) == 1 and len(data[0]) == 1:
                 # Probablemente un COUNT

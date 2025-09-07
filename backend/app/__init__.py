@@ -6,6 +6,7 @@ from flask_cors import CORS
 import os
 from dotenv import load_dotenv
 from app.utils.logger import setup_logging, log_api_call
+import uuid
 
 def create_app():
     """Create and configure Flask application"""
@@ -47,7 +48,9 @@ def create_app():
     # Request logging middleware
     @app.before_request
     def log_request_info():
-        """Log incoming requests"""
+        """Log incoming requests and set correlation id"""
+        # Correlation ID: read header or create one
+        g.request_id = request.headers.get('X-Request-Id') or str(uuid.uuid4())
         if request.path.startswith('/api/'):
             log_api_call(
                 endpoint=request.path,
@@ -55,6 +58,16 @@ def create_app():
                 remote_addr=request.remote_addr,
                 user_agent=request.headers.get('User-Agent', '')
             )
+
+    @app.after_request
+    def add_request_id(response):
+        """Attach request id to response headers"""
+        try:
+            if hasattr(g, 'request_id'):
+                response.headers['X-Request-Id'] = g.request_id
+        except Exception:
+            pass
+        return response
     
     # Register blueprints
     from app.routes.health import health_bp
