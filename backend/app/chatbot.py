@@ -112,7 +112,7 @@ ASISTENTE:"""
                         'event': 'sql_detected'
                     }
                 })
-                sql_results = self._execute_sql_from_response(assistant_message)
+                sql_results = self._execute_sql_from_response(assistant_message, user_message)
                 if sql_results:
                     assistant_message = sql_results
                     sql_executed = True
@@ -142,7 +142,7 @@ ASISTENTE:"""
         except Exception as e:
             return f"Error al generar respuesta: {str(e)}"
     
-    def _execute_sql_from_response(self, response_text):
+    def _execute_sql_from_response(self, response_text, user_message: str):
         """Extrae y ejecuta consultas SQL de la respuesta del LLM"""
         logger = logging.getLogger('chatbot_app.sql')
         # Extraer consulta SQL
@@ -182,7 +182,8 @@ ASISTENTE:"""
             if data:
                 return self._reformulate_response_with_data(clean_response, sql_query, data)
             else:
-                return clean_response + "\n\nNo encontré datos que coincidan con tu consulta."
+                # No hay datos: generar respuesta específica sin inventar información
+                return self._generate_no_data_response(user_message, sql_query)
         else:
             logger.error("SQL execution failed", extra={
                 'extra_fields': {
@@ -191,7 +192,8 @@ ASISTENTE:"""
                     'latency_ms': latency_ms
                 }
             })
-            return response_text + f"\n\nLo siento, no pude obtener esa información en este momento."
+            # Error en SQL: generar respuesta específica sin datos inventados
+            return self._generate_no_data_response(user_message, sql_query)
     
     def _reformulate_response_with_data(self, original_response, sql_query, data):
         """Usa el LLM para reformular la respuesta con los datos reales"""
@@ -284,3 +286,71 @@ RESPUESTA REFORMULADA:"""
             "experiment_data": self.analyzer.experiment_data,
             "timestamp": "session_only"
         }
+    
+    def _generate_no_data_response(self, user_message: str, failed_sql: str) -> str:
+        """Genera respuesta específica cuando no hay datos disponibles"""
+        try:
+            openai_logger = logging.getLogger('chatbot_app.openai')
+            
+            # Obtener información de datos disponibles
+            available_months = ['2024-11', '2024-12', '2025-01']
+            available_pdvs = list(self.data_store.pdv_master.keys())
+            
+            no_data_prompt = f"""El usuario preguntó: "{user_message}"
+
+La consulta SQL no encontró datos para los criterios especificados.
+
+DATOS DISPONIBLES EN EL SISTEMA:
+- Meses: {', '.join(available_months)}
+- PDVs: {', '.join(available_pdvs)}
+- Ciudades: Buenos Aires, Córdoba, Rosario, Mendoza, Tucumán, Santa Fe
+
+INSTRUCCIONES:
+- No inventes datos ni números
+- Explica que no tienes información para el período/criterio consultado
+- Sugiere alternativas con los datos disponibles
+- Mantén un tono conversacional y natural (como un asistente de chat)
+- Sé directo y útil
+
+Genera una respuesta natural:"""
+
+            model = getattr(Config, 'OPENAI_MODEL', None) or "gpt-4o-mini"
+            last_err = None
+            response = None
+            t0 = time.time()
+            for _ in range(2):
+                try:
+                    response = self.client.responses.create(
+                        model=model,
+                        input=no_data_prompt,
+                        temperature=0.5,
+                        max_output_tokens=300,
+                        timeout=10
+                    )
+                    break
+                except Exception as e:
+                    last_err = e
+                    time.sleep(0.5)
+            
+            if not response:
+                raise last_err if last_err else RuntimeError("OpenAI Responses error")
+                
+            openai_logger.info("No data response generated", extra={
+                'extra_fields': {
+                    'event': 'openai_no_data_response',
+                    'model': model,
+                    'latency_ms': round((time.time() - t0) * 1000, 2)
+                }
+            })
+            
+            return response.output_text
+            
+        except Exception as e:
+            logging.getLogger('chatbot_app.chatbot').error("Error generating no data response", extra={
+                'extra_fields': {
+                    'event': 'no_data_response_error',
+                    'error': str(e)
+                }
+            })
+            # Fallback: respuesta simple
+            return f"Lo siento, no tengo datos disponibles para tu consulta. Los datos disponibles cubren los meses: 2024-11, 2024-12, 2025-01."

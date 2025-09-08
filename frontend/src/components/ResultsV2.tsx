@@ -534,7 +534,7 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
               <div>
                 <h3 className="font-semibold text-foreground">Asistente de Datos IA</h3>
                 <p className="text-xs text-muted-foreground">
-                  🟢 Conectado • Base de datos real • Memoria conversacional
+                  Conectado • Base de datos real • Memoria conversacional
                 </p>
               </div>
             </div>
