@@ -254,10 +254,6 @@ El sistema incluye:
 4. Push al branch (`git push origin feature/nueva-funcionalidad`)
 5. Crear Pull Request
 
-## 📝 Licencia
-
-Este proyecto está bajo la licencia MIT. Ver `LICENSE` para más detalles.
-
 ---
 
 **Desarrollado con:** Flask, React, TypeScript, Docker, OpenAI API
