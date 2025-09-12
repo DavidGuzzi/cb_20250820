@@ -1,4 +1,4 @@
-# Chatbot para Análisis de Datos Retail
+# Chatbot para A/B Test.
 
 Sistema completo de chatbot especializado en análisis de datos de puntos de venta (PDVs) con capacidades text-to-SQL, desarrollado con Flask backend y React frontend. Incluye sistema inteligente de preguntas sugeridas con IA.
 
