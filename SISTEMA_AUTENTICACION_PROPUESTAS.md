@@ -928,5 +928,3 @@ class HybridAuthService:
 **Fase 2 (1 semana)**: Integración Google OAuth para empleados
 **Fase 3 (1 semana)**: Admin panel para gestión de usuarios
 **Fase 4 (opcional)**: Integración Azure AD si usan Office 365
-
-¿Te interesa que desarrollemos alguna de estas opciones específicamente o necesitas más detalles sobre algún aspecto?
