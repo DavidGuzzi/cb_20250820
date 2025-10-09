@@ -8,7 +8,7 @@
 
 **Impacto**: Consistencia total entre chatbot y dashboard, eliminación de duplicación de datos, mejora en mantenimiento.
 
----
+----
 
 ## 🎯 Situación Actual vs Objetivo
 
