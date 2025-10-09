@@ -118,3 +118,4 @@ frontend/nginx.conf.static
 backend/cloudbuild.yaml
 .env.cloudrun
 /backend/data
+app_db_20251008_2014.xlsx

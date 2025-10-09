@@ -611,46 +611,325 @@ volumes:
 
 ---
 
-## 🎯 Recomendación Final
+## 🎯 DECISIÓN FINAL: PostgreSQL ✅
 
-**Para tu proyecto actual: SQLite es la opción óptima**
+**DECISIÓN EJECUTIVA (Octubre 2025): Migrar a PostgreSQL**
 
-**Razones:**
-1. Dataset pequeño/mediano ✅
-2. Aplicación single-tenant ✅  
-3. Text-to-SQL funciona mejor con SQLite ✅
-4. Deploy simplificado ✅
-5. Cero overhead de infraestructura ✅
+### **Razones para PostgreSQL sobre SQLite:**
 
-**Considera PostgreSQL si:**
-- Planeas >1000 usuarios concurrentes
-- Dataset >500MB
-- Requieres múltiples instancias
-- Necesitas features SQL avanzados
+1. **Crecimiento de datos A/B testing** ✅
+   - Tabla `ab_test_result` crece continuamente (50+ stores × 10+ categorías × 52 semanas)
+   - Proyección: 150K-250K registros en 3-5 años
+   - PostgreSQL maneja esto sin esfuerzo
+
+2. **Concurrencia real Dashboard + Chatbot** ✅
+   - Usuarios simultáneos consultando dashboard
+   - Sesiones de chatbot ejecutando text-to-SQL en paralelo
+   - SQLite bloquea en escrituras, PostgreSQL usa MVCC
+
+3. **Capacidades analíticas avanzadas** ✅
+   - Window functions (LAG, LEAD) para análisis de tendencias
+   - CTEs complejos para consultas del chatbot
+   - JSON aggregations para APIs
+   - Better SQL = Better text-to-SQL
+
+4. **Cloud-ready y escalabilidad** ✅
+   - Integración nativa con Cloud Run SQL / Render / Supabase
+   - Read replicas para escalar lecturas
+   - Backup online sin downtime
+   - Múltiples instancias backend sin problemas
+
+5. **Text-to-SQL igual de efectivo** ✅
+   - LLMs (GPT-4, Claude) entrenan con PostgreSQL syntax
+   - Mejores mensajes de error para debugging
+   - Sintaxis estándar vs SQLite quirks
+
+### **Trade-off Aceptado:**
+- ⏱️ +1.5 días de desarrollo vs SQLite
+- 🔧 Configuración inicial más compleja
+- 💪 **Beneficio:** Base sólida para escalar 3-5 años
+
+### **Esquema Real a Migrar:**
+
+**Fuente:** `app_db_20251008_2014.xlsx` (cada hoja = tabla)
+
+```
+Tablas Maestras:
+- city_master (ciudades)
+- store_master (tiendas/PDVs con códigos sell-in/sell-out)
+- typology_master (Super & Hyper, Convenience, Pharmacies)
+- lever_master (palancas: Square meters, Checkout cooler, etc.)
+- category_master (Gatorade, 500ml, 1000ml, Sugar-free)
+- measurement_unit_master (Standardized Cases, Sales)
+- data_source_master (Sell In, Sell Out)
+- period_master (períodos semanales/mensuales)
+
+Tablas de Hechos:
+- ab_test_result (resultados detallados por tienda/período)
+- ab_test_summary (resúmenes agregados por tipología/palanca)
+```
 
 ---
 
-## 📅 Timeline Estimado
+## 📅 Timeline PostgreSQL - ACTUALIZADO (Octubre 2025)
 
-| Fase | SQLite | PostgreSQL |
-|------|--------|------------|
-| **Preparación** | 1-2 días | 2-3 días |
-| **Backend Changes** | 2-3 días | 3-4 días |
-| **Data Migration** | 1 día | 1-2 días |
-| **Frontend** | 0.5 días | 0.5 días |
-| **Testing** | 1-2 días | 2-3 días |
-| **Deploy** | 0.5 días | 1-2 días |
-| **TOTAL** | **5-8 días** | **8-14 días** |
+### **Progreso Actual:**
+
+| Fase | Estimado | Estado | Archivos Creados |
+|------|----------|--------|------------------|
+| **✅ Fase 1: Preparación** | 2-3 días | **COMPLETADO** | ✓ Schema PostgreSQL<br>✓ Docker Compose<br>✓ Script migración<br>✓ UnifiedDatabaseService |
+| **🔄 Fase 2: Backend Changes** | 3-4 días | **50% COMPLETO** | ⏳ Migrar endpoints<br>⏳ Actualizar chatbot |
+| **⏳ Fase 3: Data Migration** | 1-2 días | PENDIENTE | - |
+| **⏳ Fase 4: Frontend** | 0.5 días | PENDIENTE | - |
+| **⏳ Fase 5: Testing** | 2-3 días | PENDIENTE | - |
+| **⏳ Fase 6: Deploy** | 1-2 días | PENDIENTE | - |
+| **TOTAL** | **8-14 días** | **~7-10 días restantes** | - |
+
+---
+
+## 📁 Archivos Creados Hoy (Sesión 1)
+
+### **1. Schema PostgreSQL** ✅
+**Archivo:** `backend/database/schema.sql`
+- 10 tablas maestras + 2 tablas de hechos
+- 3 vistas SQL para chatbot (`v_chatbot_complete`, `v_dashboard_summary`, `v_evolution_timeline`)
+- Índices para performance
+- Triggers `updated_at` automáticos
+- Comentarios y documentación
+
+### **2. Docker Compose PostgreSQL** ✅
+**Archivo:** `docker-compose.postgres.yml`
+- PostgreSQL 15-alpine
+- Backend con `DATABASE_URL`
+- Frontend sin cambios
+- pgAdmin opcional (profile: tools)
+- Volumes persistentes
+- Health checks configurados
+
+### **3. Script de Migración** ✅
+**Archivo:** `backend/scripts/migrate_excel_to_postgres.py`
+- Lee `app_db_20251008_2014.xlsx`
+- Migra todas las hojas a PostgreSQL
+- Respeta orden de dependencias (maestros → hechos)
+- Flags: `--truncate`, `--validate-only`
+- Batch insert con `execute_values`
+
+### **4. Unified Database Service** ✅
+**Archivo:** `backend/app/services/unified_database_service.py`
+- SQLAlchemy + Connection Pooling
+- Métodos Dashboard: `get_dashboard_results()`, `get_evolution_data()`, `get_filter_options()`
+- Métodos Chatbot: `execute_query()`, `get_schema_info()`
+- Compatible con APIs existentes
+- Schema info completo para text-to-SQL
+
+### **5. Dependencias Actualizadas** ✅
+**Archivo:** `backend/requirements.txt`
+- `psycopg2-binary==2.9.9`
+- `SQLAlchemy==2.0.25`
+- `alembic==1.13.1`
+
+### **6. Variables de Entorno** ✅
+**Archivo:** `.env.example`
+- `DB_PASSWORD`
+- `DATABASE_URL`
+- `PGADMIN_PASSWORD`
+
+---
+
+## 🚀 PRÓXIMOS PASOS (Para Mañana)
+
+### **PASO 1: Levantar PostgreSQL y Migrar Datos (1 hora)**
+
+```bash
+# 1. Copiar variables de entorno
+cp .env.example .env
+# Editar .env y agregar OPENAI_API_KEY
+
+# 2. Levantar PostgreSQL
+docker-compose -f docker-compose.postgres.yml up -d db
+
+# 3. Verificar que PostgreSQL está corriendo
+docker-compose -f docker-compose.postgres.yml ps
+docker-compose -f docker-compose.postgres.yml logs db
+
+# 4. Ejecutar migración de datos
+python backend/scripts/migrate_excel_to_postgres.py --truncate
+
+# 5. Validar migración
+python backend/scripts/migrate_excel_to_postgres.py --validate-only
+```
+
+### **PASO 2: Migrar Endpoints del Dashboard (2 horas)**
+
+**Archivos a modificar:**
+1. `backend/app/routes/analytics.py`
+   - Reemplazar `excel_service` por `unified_db`
+   - Actualizar `/api/dashboard/results`
+   - Actualizar `/api/dashboard/evolution-data`
+   - Actualizar `/api/dashboard/filter-options`
+
+2. `backend/app/__init__.py`
+   - Importar `unified_db`
+   - Agregar health check de PostgreSQL
+
+**Código de ejemplo:**
+```python
+# En analytics.py
+from app.services.unified_database_service import unified_db
+
+@analytics_bp.route('/api/dashboard/results', methods=['GET'])
+def get_dashboard_results():
+    tipologia = request.args.get('tipologia')
+    result = unified_db.get_dashboard_results(tipologia)
+    return jsonify(result), 200
+```
+
+### **PASO 3: Migrar Chatbot a PostgreSQL (2 horas)**
+
+**Archivos a modificar:**
+1. `backend/app/chatbot.py`
+   ```python
+   # Cambiar:
+   from app.data_store import DataStore
+   from app.sql_engine import SQLEngine
+
+   # Por:
+   from app.services.unified_database_service import unified_db
+
+   class ABTestingChatbot:
+       def __init__(self):
+           # ...
+           self.db_service = unified_db  # En lugar de sql_engine
+   ```
+
+2. `backend/app/services/chatbot_service.py`
+   - Actualizar referencias a `sql_engine`
+   - Usar `unified_db.execute_query()` y `unified_db.get_schema_info()`
+
+### **PASO 4: Testing Integrado (1 hora)**
+
+```bash
+# 1. Levantar todos los servicios
+docker-compose -f docker-compose.postgres.yml up -d
+
+# 2. Test endpoints dashboard
+curl http://localhost:5000/api/dashboard/results
+curl http://localhost:5000/api/dashboard/filter-options
+
+# 3. Test chatbot
+curl -X POST http://localhost:5000/api/chat/start \
+  -H "Content-Type: application/json" \
+  -d '{"userEmail":"test@test.com"}'
+
+# 4. Verificar frontend
+# Abrir: http://localhost:5173
+```
+
+### **PASO 5: Crear Tests Automatizados (2 horas)**
+
+**Archivo:** `backend/tests/test_unified_database.py`
+```python
+import unittest
+from app.services.unified_database_service import unified_db
+
+class TestUnifiedDatabase(unittest.TestCase):
+    def test_dashboard_results(self):
+        result = unified_db.get_dashboard_results()
+        self.assertTrue(result['success'])
+        self.assertGreater(len(result['data']), 0)
+
+    def test_chatbot_query(self):
+        result = unified_db.execute_query(
+            "SELECT COUNT(*) as total FROM store_master"
+        )
+        self.assertTrue(result['success'])
+```
+
+---
+
+## ⚠️ DECISIONES TÉCNICAS TOMADAS
+
+### **1. Vistas SQL para Chatbot**
+- **Decisión:** Crear vistas (`v_chatbot_complete`, etc.) en lugar de hacer joins en Python
+- **Razón:** El LLM puede consultar vistas directamente, simplifica text-to-SQL
+- **Trade-off:** Más complejidad en schema, pero mejor performance
+
+### **2. IDs vs Nombres en Maestros**
+- **Decisión:** Usar IDs como PKs, nombres como únicos
+- **Razón:** Normalización estándar, permite cambios de nombre sin romper FKs
+- **Frontend:** Debe convertir nombres a IDs antes de consultar
+
+### **3. Compatible con APIs Existentes**
+- **Decisión:** `UnifiedDatabaseService` retorna mismo formato que `excel_service`
+- **Razón:** Frontend NO requiere cambios
+- **Ventaja:** Migración transparente
+
+### **4. Connection Pooling**
+- **Decisión:** SQLAlchemy con pool_size=10, max_overflow=20
+- **Razón:** Dashboard + Chatbot concurrentes requieren múltiples conexiones
+- **Configuración:** Ajustable en `unified_database_service.py`
+
+---
+
+## 🔧 Comandos Útiles
+
+### **Docker PostgreSQL:**
+```bash
+# Levantar solo PostgreSQL
+docker-compose -f docker-compose.postgres.yml up -d db
+
+# Ver logs de PostgreSQL
+docker-compose -f docker-compose.postgres.yml logs -f db
+
+# Conectar a PostgreSQL CLI
+docker exec -it gatorade_postgres psql -U gatorade_user -d gatorade_ab_testing
+
+# Levantar con pgAdmin
+docker-compose -f docker-compose.postgres.yml --profile tools up -d
+
+# Acceder pgAdmin: http://localhost:5050
+# Email: admin@gatorade.com, Password: admin
+```
+
+### **Backup y Restore:**
+```bash
+# Backup
+docker exec gatorade_postgres pg_dump -U gatorade_user gatorade_ab_testing > backup.sql
+
+# Restore
+docker exec -i gatorade_postgres psql -U gatorade_user gatorade_ab_testing < backup.sql
+```
 
 ---
 
 ## ✅ Criterios de Éxito
 
-- [ ] Chatbot y dashboard muestran datos consistentes
-- [ ] Performance mantenida o mejorada  
-- [ ] Zero downtime deployment
-- [ ] Todos los tests automatizados pasan
-- [ ] Backup/restore funcional
-- [ ] Documentación actualizada
+- [ ] PostgreSQL corriendo en Docker ✅ (Listo para levantar)
+- [ ] Datos migrados desde Excel ⏳ (Script listo, falta ejecutar)
+- [ ] Dashboard consume PostgreSQL ⏳ (Service listo, falta integrar)
+- [ ] Chatbot consume PostgreSQL ⏳ (Service listo, falta integrar)
+- [ ] Datos consistentes Dashboard-Chatbot ⏳
+- [ ] Performance >= Excel actual ⏳
+- [ ] Tests automatizados pasan ⏳
+- [ ] Zero downtime deployment ⏳
+- [ ] Documentación actualizada ✅
 
-¿Te parece bien empezar con SQLite y migrar a PostgreSQL posteriormente si crece la necesidad de escalabilidad?
+---
+
+## 📝 Notas para Continuar
+
+**Archivos que NO se deben modificar (aún):**
+- `frontend/**/*` - Frontend mantiene compatibilidad
+- `backend/app/data_store.py` - Se deprecará después
+- `backend/app/sql_engine.py` - Se deprecará después
+- `backend/app/services/excel_service.py` - Se deprecará después
+
+**Orden de migración recomendado:**
+1. ✅ Schema + Docker + Scripts (COMPLETADO)
+2. ⏳ Dashboard endpoints → PostgreSQL (SIGUIENTE)
+3. ⏳ Chatbot → PostgreSQL
+4. ⏳ Tests integración
+5. ⏳ Deprecar archivos antiguos
+6. ⏳ Deploy producción
+
+**Tiempo estimado restante:** 7-10 días (distribuidos en bloques de 2-4 horas/día)
