@@ -88,33 +88,77 @@ npm run lint
 - **ChatbotService**: Integrates OpenAI text-to-SQL chatbot
 - **SessionManager**: Manages chat sessions with UUIDs
 - **QueryCache**: In-memory cache for SQL query optimization
+- **UnifiedDatabaseService**: PostgreSQL integration with SQLAlchemy and connection pooling
 - **Structured Logging**: JSON logs for production monitoring
 
+#### **UnifiedDatabaseService Methods:**
+- `get_filter_options()` → Returns 6 filter arrays from master tables (excludes "Control" palanca)
+- `get_dashboard_results(tipologia, fuente, unidad, categoria)` → Table data with multiple filters
+- `get_evolution_data(palanca, kpi, tipologia)` → Timeline data (accepts names, not IDs)
+- `execute_query(sql_query)` → Text-to-SQL execution for chatbot
+- `get_schema_info()` → Schema description for LLM context
+
 ### API Endpoints
+
+**Chat:**
 - `POST /api/chat/start` - Initialize chat session
 - `POST /api/chat/message` - Send message to chatbot
 - `GET /api/chat/history/{session_id}` - Get conversation history
+- `POST /api/chat/suggested-questions` - Get AI-generated follow-up questions
+
+**Dashboard:**
+- `GET /api/dashboard/filter-options` - Get dynamic filter options from PostgreSQL master tables
+- `GET /api/dashboard/results?tipologia=X&fuente=Y&unidad=Z&categoria=W` - Get A/B test results with multiple filters
+- `GET /api/dashboard/evolution-data?palanca=X&kpi=Y&tipologia=Z` - Get timeline chart data (accepts names, not IDs)
+- `GET /api/dashboard/data-summary` - Get data summary and row counts
+
+**Health & Analytics:**
 - `GET /api/health` - Health check
-- `GET /api/analytics/sessions` - System metrics
+- `GET /api/analytics/sessions` - System metrics and cache stats
 
 ### Frontend Structure
 - **React + TypeScript + Vite** stack
-- **Tailwind CSS** with **shadcn/ui** component library
+- **Tailwind CSS** with **shadcn/ui** component library (Radix UI components)
 - **Custom hooks**: useChat for chat state management
-- **API Service**: Centralized API communication
+- **API Service**: Centralized API communication with typed interfaces
 - **Local persistence**: localStorage for session continuity
 - **Theme System**: Dark/Light mode with ThemeProvider context
-- **Modern Dashboard**: Figma-based design with A/B testing analytics
+- **Modern Dashboard**: Figma-based design with dynamic A/B testing analytics
+
+#### **Dashboard Components:**
+- **Dashboard.tsx**: Main container, manages global filter state (6 filters)
+- **FilterPanel.tsx**: Left sidebar with dynamic filters from PostgreSQL
+- **ExperimentTable.tsx**: Results table with Source-Category groups and Unit sub-rows
+- **TimelineChart.tsx**: Evolution chart using Recharts (LineChart)
+- **SummaryCards.tsx**: Static summary cards (top-left sidebar)
+
+#### **Table Structure (ExperimentTable):**
+- **Row Groups**: Combinations of `Source - Category` (e.g., "Sell In - Gatorade")
+- **Sub-rows**: By Unit (Cajas 8oz, Ventas)
+- **Columns**: Dynamic Palancas with icons
+- **Cell Values**: `difference_vs_control` (colored) + `average_variation` (parentheses)
+- **Percentage Format**: Values multiplied by 100 (0.3 → 30.0%)
+- **Color Logic**: Green for positive, Red for negative
 
 ### Data Layer
-- **8 PDVs** across 6 Argentine cities (Buenos Aires, Córdoba, Rosario, Mendoza, Tucumán, Santa Fe)
-- **SQLite in-memory**: Text-to-SQL queries on retail metrics
-- **3 months** of revenue, visitor, and conversion data
+- **PostgreSQL Database**: Unified data source for both Dashboard and Chatbot
+- **225 stores** with A/B testing data across multiple cities
+- **10 master tables + 2 fact tables**: Normalized schema for scalability
+- **Text-to-SQL**: Natural language queries executed on PostgreSQL
 - **Real-time analytics**: Cache performance and session metrics
+- **38,470+ records**: Including experiments, stores, periods, and categories
 
 ## Development Workflow
 
-### Quick Start
+### Quick Start (PostgreSQL)
+1. `cp .env.example .env` (add OPENAI_API_KEY)
+2. `docker-compose -f docker-compose.postgres.yml up -d`
+3. Frontend: http://localhost:5173
+4. Backend API: http://localhost:5000/api
+5. PostgreSQL: localhost:5432
+6. (Optional) pgAdmin: http://localhost:5050 (run with `--profile tools`)
+
+### Legacy Quick Start (In-Memory SQLite)
 1. `cp .env.example .env` (add OPENAI_API_KEY)
 2. `docker-compose up -d`
 3. Frontend: http://localhost:5173
@@ -150,15 +194,31 @@ docker-compose -f deploy/docker-compose.prod.yml up -d
 
 ### Dashboard Filter System
 
-The dashboard includes an integrated filter system with the following behavior:
-- **Tipología filter**: Impacts both the results table and timeline chart
-- **Palanca filter**: Impacts only the timeline chart 
-- **KPI filter**: Impacts only the timeline chart
-- **Default values**: All filters have pre-selected default values:
-  - Tipología: "Super e Hiper"
-  - Palanca: "Punta de Góndola" 
-  - KPI: "Cajas Estandarizadas"
-- **Filter persistence**: The timeline chart uses global filters instead of its own controls
+The dashboard includes an **enhanced filter system** with dynamic options from PostgreSQL:
+
+#### **Filter Types:**
+1. **Table Filters** (Impact ExperimentTable):
+   - **Tipología**: Mandatory filter, always active (default: "Super e hiper")
+   - **Fuente de Datos**: Optional filter (Sell In, Sell Out, etc.) - Default: "all"
+   - **Unidad de Medida**: Optional filter (Cajas 8oz, Ventas) - Default: "all"
+   - **Categoría**: Optional filter (Gatorade, Electrolit, etc.) - Default: "all"
+
+2. **Timeline Filters** (Impact TimelineChart only):
+   - **Palanca**: Required for timeline (default: "Punta de góndola")
+   - **KPI**: Required for timeline (default: "Cajas 8oz")
+
+#### **Technical Details:**
+- **All filters are dynamic**: Loaded from PostgreSQL master tables (no hardcoded values)
+- **"Control" palanca excluded**: Filter logic excludes "Control" from palanca options
+- **'all' value handling**: Frontend uses `'all'` for "Todas" option, converted to `undefined` in API calls
+- **SelectItem compatibility**: Uses `value="all"` instead of `value=""` for Radix UI compatibility
+- **Filter persistence**: Global state managed in Dashboard.tsx, propagated to child components
+
+#### **Data Flow:**
+1. `FilterPanel.tsx` → Loads options from `/api/dashboard/filter-options`
+2. `Dashboard.tsx` → Manages filter state with defaults
+3. `ExperimentTable.tsx` → Converts 'all' to undefined, calls `/api/dashboard/results`
+4. `TimelineChart.tsx` → Uses palanca/kpi names directly (no ID conversion)
 
 ### Intelligent Suggested Questions System
 
@@ -229,14 +289,90 @@ The chatbot interface has been significantly improved for better user experience
 - **Focus State Management**: Tracks conversation state to determine appropriate focus behavior
 - **Anti-Pattern Prevention**: Prevents focus conflicts with scroll animations and UI interactions
 
+## PostgreSQL Database
+
+### Schema Overview
+- **10 Master Tables**:
+  - `city_master`: City names (Bogotá, Medellín, Cali, etc.)
+  - `typology_master`: Store types (Super e hiper, Conveniencia, Droguerías)
+  - `lever_master`: Marketing levers/palancas (Punta de góndola, Metro cuadrado, etc.)
+  - `category_master`: Product categories (Gatorade, Electrolit, Powerade, etc.)
+  - `measurement_unit_master`: Units (Cajas 8oz, Ventas)
+  - `data_source_master`: Data sources (Sell In, Sell Out, Sell Out - SOM, etc.)
+  - `period_master`: Time periods with start/end dates
+  - `store_master`: 225 stores with city, typology, and lever assignments
+
+- **2 Fact Tables**:
+  - `ab_test_result`: 37,840 rows - Detailed A/B test results by store/period
+  - `ab_test_summary`: 312 rows - Aggregated results by typology/lever/category
+
+- **3 SQL Views** (for optimized queries):
+  - `v_chatbot_complete`: Denormalized view with all JOINs for text-to-SQL
+  - `v_dashboard_summary`: Aggregated view for ExperimentTable
+  - `v_evolution_timeline`: Time-series view for TimelineChart
+
+- **Indexes**: Optimized for both Dashboard queries and Chatbot text-to-SQL
+- **Auto-triggers**: `updated_at` columns automatically maintained on UPDATE
+
+### Data Migration
+```bash
+# Migrate data from Excel to PostgreSQL
+python backend/scripts/migrate_excel_to_postgres.py --truncate
+
+# Validate migration
+python backend/scripts/migrate_excel_to_postgres.py --validate-only
+```
+
+### Database Access
+```bash
+# Connect to PostgreSQL CLI
+docker exec -it gatorade_postgres psql -U gatorade_user -d gatorade_ab_testing
+
+# View tables
+\dt
+
+# Sample queries
+SELECT COUNT(*) FROM store_master;
+SELECT * FROM v_chatbot_complete LIMIT 5;
+
+# Exit
+\q
+```
+
+### pgAdmin (Optional GUI)
+```bash
+# Start with pgAdmin
+docker-compose -f docker-compose.postgres.yml --profile tools up -d
+
+# Access: http://localhost:5050
+# Email: admin@gatorade.com
+# Password: admin (or check .env)
+```
+
+### Backup & Restore
+```bash
+# Backup
+docker exec gatorade_postgres pg_dump -U gatorade_user gatorade_ab_testing > backup.sql
+
+# Restore
+docker exec -i gatorade_postgres psql -U gatorade_user gatorade_ab_testing < backup.sql
+```
+
 ## Environment Variables
 
-### Local Development (.env.local):
+### Local Development with PostgreSQL (.env):
 ```bash
 FLASK_ENV=development
 OPENAI_API_KEY=your-openai-api-key
 SECRET_KEY=dev-secret-key-local
 LOG_LEVEL=DEBUG
+
+# PostgreSQL Configuration
+DB_PASSWORD=gatorade_dev_password
+DATABASE_URL=postgresql://gatorade_user:gatorade_dev_password@db:5432/gatorade_ab_testing
+
+# pgAdmin (optional)
+PGADMIN_PASSWORD=admin
 ```
 
 ### Cloud Run Production:

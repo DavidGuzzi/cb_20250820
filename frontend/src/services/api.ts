@@ -218,27 +218,49 @@ class ApiService {
       tipologia: string[];
       palanca: string[];
       kpi: string[];
+      fuente_datos: string[];
+      unidad_medida: string[];
+      categoria: string[];
     };
   }> {
     return this.fetchApi('/api/dashboard/filter-options');
   }
 
   // Get dashboard results data
-  async getDashboardResults(tipologia?: string): Promise<{
+  async getDashboardResults(
+    tipologia?: string,
+    fuente?: string,
+    unidad?: string,
+    categoria?: string
+  ): Promise<{
     success: boolean;
     data: Array<{
       source: string;
-      kpi: string;
+      category: string;
+      unit: string;
       palanca: string;
       variacion_promedio: number;
       diferencia_vs_control: number;
     }>;
     palancas: string[];
-    kpis: string[];
-    filtered_by: string | null;
+    sources: string[];
+    categories: string[];
+    units: string[];
+    filtered_by: {
+      tipologia: string | null;
+      fuente: string | null;
+      unidad: string | null;
+      categoria: string | null;
+    };
   }> {
-    const params = tipologia ? `?tipologia=${encodeURIComponent(tipologia)}` : '';
-    return this.fetchApi(`/api/dashboard/results${params}`);
+    const params = new URLSearchParams();
+    if (tipologia) params.append('tipologia', tipologia);
+    if (fuente) params.append('fuente', fuente);
+    if (unidad) params.append('unidad', unidad);
+    if (categoria) params.append('categoria', categoria);
+
+    const queryString = params.toString();
+    return this.fetchApi(`/api/dashboard/results${queryString ? '?' + queryString : ''}`);
   }
 
   // Get dashboard data summary
@@ -258,7 +280,7 @@ class ApiService {
   }
 
   // Get evolution data for timeline chart
-  async getEvolutionData(palancaId: number = 5, kpiId: number = 1, tipologia?: string): Promise<{
+  async getEvolutionData(palanca: string, kpi: string, tipologia?: string): Promise<{
     success: boolean;
     data: Array<{
       period: string;
@@ -268,20 +290,16 @@ class ApiService {
     }>;
     palanca_name: string;
     kpi_name: string;
-    palanca_id: number;
-    kpi_id: number;
-    available_palancas: number[];
-    available_kpis: number[];
     filtered_by: string | null;
     error?: string;
   }> {
     const params = new URLSearchParams();
-    params.append('palanca', palancaId.toString());
-    params.append('kpi', kpiId.toString());
+    params.append('palanca', palanca);
+    params.append('kpi', kpi);
     if (tipologia) {
       params.append('tipologia', tipologia);
     }
-    
+
     return this.fetchApi(`/api/dashboard/evolution-data?${params.toString()}`);
   }
 

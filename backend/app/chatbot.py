@@ -1,8 +1,7 @@
 from openai import OpenAI
 from app.config import Config
 from app.conversation_memory import ConversationMemory
-from app.data_store import DataStore
-from app.sql_engine import SQLEngine
+from app.services.unified_database_service import unified_db
 import json
 import re
 import time
@@ -13,8 +12,7 @@ class ABTestingChatbot:
         Config.validate()
         self.client = OpenAI()
         self.memory = ConversationMemory()
-        self.data_store = DataStore()
-        self.sql_engine = SQLEngine()
+        self.db_service = unified_db
     
     def get_response(self, user_message: str) -> str:
         """Obtiene respuesta del chatbot usando Responses API"""
@@ -34,7 +32,7 @@ class ABTestingChatbot:
             
             # Preparar contexto completo
             system_context = self.memory.system_prompt
-            schema_info = self.sql_engine.get_schema_info()
+            schema_info = self.db_service.get_schema_info()
             
             # Construir historial de conversación
             conversation_history = ""
@@ -162,7 +160,7 @@ ASISTENTE:"""
         
         # Ejecutar consulta
         t0 = time.time()
-        result = self.sql_engine.execute_query(sql_query)
+        result = self.db_service.execute_query(sql_query)
         latency_ms = round((time.time() - t0) * 1000, 2)
         
         if result['success']:
@@ -291,19 +289,26 @@ RESPUESTA REFORMULADA:"""
         """Genera respuesta específica cuando no hay datos disponibles"""
         try:
             openai_logger = logging.getLogger('chatbot_app.openai')
-            
-            # Obtener información de datos disponibles
-            available_months = ['2024-11', '2024-12', '2025-01']
-            available_pdvs = list(self.data_store.pdv_master.keys())
-            
+
+            # Obtener información de datos disponibles desde PostgreSQL
+            available_data = self.db_service.get_data_summary()
+            summary = available_data.get('summary', {})
+            available_periods = summary.get('periods', [])
+            available_stores = [s['store_name'] for s in summary.get('stores', [])][:10]
+            available_cities = summary.get('cities', [])
+
+            periods_str = ', '.join(str(p) for p in available_periods[:5])
+            stores_str = ', '.join(available_stores)
+            cities_str = ', '.join(available_cities)
+
             no_data_prompt = f"""El usuario preguntó: "{user_message}"
 
 La consulta SQL no encontró datos para los criterios especificados.
 
 DATOS DISPONIBLES EN EL SISTEMA:
-- Meses: {', '.join(available_months)}
-- PDVs: {', '.join(available_pdvs)}
-- Ciudades: Buenos Aires, Córdoba, Rosario, Mendoza, Tucumán, Santa Fe
+- Períodos: {periods_str}
+- Tiendas (primeras 10): {stores_str}
+- Ciudades: {cities_str}
 
 INSTRUCCIONES:
 - No inventes datos ni números
@@ -353,4 +358,4 @@ Genera una respuesta natural:"""
                 }
             })
             # Fallback: respuesta simple
-            return f"Lo siento, no tengo datos disponibles para tu consulta. Los datos disponibles cubren los meses: 2024-11, 2024-12, 2025-01."
+            return f"Lo siento, no tengo datos disponibles para tu consulta. Por favor intenta con otros criterios o períodos."

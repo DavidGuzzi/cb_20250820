@@ -19,9 +19,12 @@ interface DashboardProps {
 export function Dashboard({ userEmail, onNavigateToResults, onLogout }: DashboardProps) {
   const { theme, toggleTheme } = useTheme();
   const [filters, setFilters] = useState({
-    tipologia: 'Super e Hiper', // Default tipologia
-    palanca: 'Punta de Góndola', // Default palanca
-    kpi: 'Cajas Estandarizadas' // Default kpi
+    tipologia: 'Super e hiper', // Default tipologia
+    palanca: 'Punta de góndola', // Default palanca (solo para timeline)
+    kpi: '', // Default kpi (solo para timeline)
+    fuente: 'all', // Default fuente (all = sin filtro)
+    unidad: 'all', // Default unidad (all = sin filtro)
+    categoria: 'all' // Default categoria (all = sin filtro)
   });
 
   return (

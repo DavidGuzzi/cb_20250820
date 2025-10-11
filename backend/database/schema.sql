@@ -63,13 +63,14 @@ CREATE TABLE data_source_master (
 -- Period Master (Weeks/Months)
 CREATE TABLE period_master (
     period_id SERIAL PRIMARY KEY,
-    period_label VARCHAR(20) NOT NULL UNIQUE,  -- e.g., "202501" or "2025-W14"
-    period_type VARCHAR(10) NOT NULL,          -- "Week" or "Month"
+    period_label VARCHAR(20) NOT NULL,  -- e.g., "202501" (can be Week or Month)
+    period_type VARCHAR(10) NOT NULL,   -- "Week" or "Month"
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_period_type CHECK (period_type IN ('Week', 'Month'))
+    CONSTRAINT chk_period_type CHECK (period_type IN ('Week', 'Month')),
+    CONSTRAINT unique_period_label_type UNIQUE (period_label, period_type)
 );
 
 -- Store Master (PDVs with Sell In/Out codes)
@@ -85,11 +86,11 @@ CREATE TABLE store_master (
     end_date_sellin DATE,
     start_date_sellout DATE,
     end_date_sellout DATE,
+    execution_ok VARCHAR(10),  -- Status: "OK", "Pending", etc.
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT unique_sellin_code UNIQUE (store_code_sellin),
-    CONSTRAINT unique_sellout_code UNIQUE (store_code_sellout)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    -- Note: No UNIQUE constraints on store codes because "-" appears multiple times
 );
 
 -- ============================================================================

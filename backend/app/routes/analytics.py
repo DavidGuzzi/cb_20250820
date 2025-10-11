@@ -5,7 +5,7 @@ from flask import Blueprint, jsonify, request
 from app.services.session_manager import session_manager
 from app.services.cache_service import query_cache
 from app.data_store import DataStore
-from app.services.excel_service import excel_service
+from app.services.unified_database_service import unified_db
 
 analytics_bp = Blueprint('analytics', __name__)
 
@@ -203,14 +203,14 @@ def get_revenue_by_city():
 
 @analytics_bp.route('/api/dashboard/filter-options', methods=['GET'])
 def get_filter_options():
-    """Get filter options from maestro files"""
+    """Get filter options from PostgreSQL maestro tables"""
     try:
-        options = excel_service.get_filter_options()
+        options = unified_db.get_filter_options()
         return jsonify({
             'success': True,
             'options': options
         }), 200
-        
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -219,13 +219,22 @@ def get_filter_options():
 
 @analytics_bp.route('/api/dashboard/results', methods=['GET'])
 def get_dashboard_results():
-    """Get dashboard results data filtered by tipologia"""
+    """Get dashboard results data with multiple filters from PostgreSQL"""
     try:
         tipologia = request.args.get('tipologia')
-        results = excel_service.get_results_data(tipologia)
-        
+        fuente = request.args.get('fuente')
+        unidad = request.args.get('unidad')
+        categoria = request.args.get('categoria')
+
+        results = unified_db.get_dashboard_results(
+            tipologia=tipologia,
+            fuente=fuente,
+            unidad=unidad,
+            categoria=categoria
+        )
+
         return jsonify(results), 200
-        
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -234,14 +243,17 @@ def get_dashboard_results():
 
 @analytics_bp.route('/api/dashboard/data-summary', methods=['GET'])
 def get_data_summary():
-    """Get summary of available Excel data"""
+    """Get summary of available PostgreSQL data"""
     try:
-        summary = excel_service.get_data_summary()
-        return jsonify({
-            'success': True,
-            'summary': summary
-        }), 200
-        
+        result = unified_db.get_data_summary()
+        if result.get('success'):
+            return jsonify({
+                'success': True,
+                'summary': result['summary']
+            }), 200
+        else:
+            return jsonify(result), 500
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -250,16 +262,16 @@ def get_data_summary():
 
 @analytics_bp.route('/api/dashboard/evolution-data', methods=['GET'])
 def get_evolution_data():
-    """Get evolution data for timeline chart"""
+    """Get evolution data for timeline chart from PostgreSQL"""
     try:
-        palanca_id = int(request.args.get('palanca', 5))  # Default palanca=5
-        kpi_id = int(request.args.get('kpi', 1))  # Default kpi=1
+        palanca = request.args.get('palanca', 'Punta de góndola')  # Default palanca name
+        kpi = request.args.get('kpi', 'Cajas 8oz')  # Default kpi name
         tipologia = request.args.get('tipologia')
-        
-        results = excel_service.get_evolution_data(palanca_id, kpi_id, tipologia)
-        
+
+        results = unified_db.get_evolution_data(palanca, kpi, tipologia)
+
         return jsonify(results), 200
-        
+
     except Exception as e:
         return jsonify({
             'success': False,

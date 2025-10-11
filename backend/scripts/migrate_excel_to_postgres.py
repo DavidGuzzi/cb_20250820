@@ -51,8 +51,8 @@ SHEET_TO_TABLE = {
     'data_source_master': 'data_source_master',
     'period_master': 'period_master',
     'store_master': 'store_master',
-    'ab_test_result': 'ab_test_result',
-    'ab_test_summary': 'ab_test_summary'
+    'df_ab_test_final': 'ab_test_result',
+    'df_ab_test_summary_final': 'ab_test_summary'
 }
 
 
@@ -152,8 +152,8 @@ class ExcelToPostgresMigrator:
             'data_source_master',
             'period_master',
             'store_master',
-            'ab_test_result',
-            'ab_test_summary'
+            'df_ab_test_final',
+            'df_ab_test_summary_final'
         ]
 
         for sheet_name in ordered_sheets:

@@ -17,40 +17,18 @@ export function TimelineChart({ filters }: TimelineChartProps) {
   const [kpiName, setKpiName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [maestroMappings, setMaestroMappings] = useState<any>(null);
-
-  // Load maestro mappings once
-  useEffect(() => {
-    const loadMappings = async () => {
-      try {
-        const response = await apiService.getMaestroMappings();
-        if (response.success) {
-          setMaestroMappings(response.mappings);
-        }
-      } catch (err) {
-        console.error('Error loading maestro mappings:', err);
-      }
-    };
-
-    loadMappings();
-  }, []);
 
   useEffect(() => {
     const loadEvolutionData = async () => {
-      if (!maestroMappings) return;
-      
       try {
         setLoading(true);
         setError(null);
-        
-        // Convert filter names to IDs, with defaults
-        const defaultPalancaId = maestroMappings.palanca_name_to_id['Punta de Góndola'] || 8;
-        const defaultKpiId = maestroMappings.kpi_name_to_id['Cajas Estandarizadas'] || 1;
-        
-        const palancaId = filters.palanca ? maestroMappings.palanca_name_to_id[filters.palanca] || defaultPalancaId : defaultPalancaId;
-        const kpiId = filters.kpi ? maestroMappings.kpi_name_to_id[filters.kpi] || defaultKpiId : defaultKpiId;
-        
-        const response = await apiService.getEvolutionData(palancaId, kpiId, filters.tipologia);
+
+        // Use filter names directly (no ID conversion needed)
+        const palanca = filters.palanca || 'Punta de góndola';
+        const kpi = filters.kpi || 'Cajas 8oz';
+
+        const response = await apiService.getEvolutionData(palanca, kpi, filters.tipologia);
         
         if (response.success) {
           // Transform data for the chart
@@ -77,7 +55,7 @@ export function TimelineChart({ filters }: TimelineChartProps) {
     };
 
     loadEvolutionData();
-  }, [maestroMappings, filters.palanca, filters.kpi, filters.tipologia]);
+  }, [filters.palanca, filters.kpi, filters.tipologia]);
 
   if (loading) {
     return (

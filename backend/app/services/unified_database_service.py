@@ -64,14 +64,20 @@ class UnifiedDatabaseService:
     # DASHBOARD METHODS
     # ========================================================================
 
-    def get_dashboard_results(self, tipologia: Optional[str] = None) -> Dict[str, Any]:
+    def get_dashboard_results(
+        self,
+        tipologia: Optional[str] = None,
+        fuente: Optional[str] = None,
+        unidad: Optional[str] = None,
+        categoria: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Obtiene datos para la tabla del dashboard
         Compatible con endpoint: /api/dashboard/results
         """
         try:
             with self.get_session() as session:
-                # Use the view for simplified queries
+                # Use the view for simplified queries with multiple filters
                 query = text("""
                     SELECT
                         source_name,
@@ -83,10 +89,19 @@ class UnifiedDatabaseService:
                         difference_vs_control
                     FROM v_dashboard_summary
                     WHERE (:tipologia IS NULL OR typology_name = :tipologia)
-                    ORDER BY source_name, lever_name, category_name
+                      AND (:fuente IS NULL OR source_name = :fuente)
+                      AND (:unidad IS NULL OR unit_name = :unidad)
+                      AND (:categoria IS NULL OR category_name = :categoria)
+                      AND lever_name != 'Control'
+                    ORDER BY source_name, category_name, unit_name, lever_name
                 """)
 
-                result = session.execute(query, {'tipologia': tipologia})
+                result = session.execute(query, {
+                    'tipologia': tipologia,
+                    'fuente': fuente,
+                    'unidad': unidad,
+                    'categoria': categoria
+                })
                 rows = result.fetchall()
 
                 # Convert to dict format expected by frontend
@@ -94,22 +109,32 @@ class UnifiedDatabaseService:
                 for row in rows:
                     data.append({
                         'source': row.source_name,
-                        'kpi': row.category_name,  # Frontend expects 'kpi'
+                        'category': row.category_name,
+                        'unit': row.unit_name,
                         'palanca': row.lever_name,
                         'variacion_promedio': float(row.average_variation) if row.average_variation else 0,
                         'diferencia_vs_control': float(row.difference_vs_control) if row.difference_vs_control else 0
                     })
 
-                # Extract unique palancas and kpis
+                # Extract unique palancas, sources, categories, and units
                 palancas = sorted(list(set(item['palanca'] for item in data)))
-                kpis = sorted(list(set(item['kpi'] for item in data)))
+                sources = sorted(list(set(item['source'] for item in data)))
+                categories = sorted(list(set(item['category'] for item in data)))
+                units = sorted(list(set(item['unit'] for item in data)))
 
                 return {
                     'success': True,
                     'data': data,
                     'palancas': palancas,
-                    'kpis': kpis,
-                    'filtered_by': tipologia
+                    'sources': sources,
+                    'categories': categories,
+                    'units': units,
+                    'filtered_by': {
+                        'tipologia': tipologia,
+                        'fuente': fuente,
+                        'unidad': unidad,
+                        'categoria': categoria
+                    }
                 }
 
         except Exception as e:
@@ -119,39 +144,25 @@ class UnifiedDatabaseService:
                 'error': str(e),
                 'data': [],
                 'palancas': [],
-                'kpis': []
+                'sources': [],
+                'categories': [],
+                'units': []
             }
 
     def get_evolution_data(
         self,
-        palanca_id: int = 5,
-        kpi_id: int = 1,
+        palanca: str,
+        kpi: str,
         tipologia: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Obtiene datos para el timeline chart
         Compatible con endpoint: /api/dashboard/evolution-data
+        Now accepts names directly instead of IDs
         """
         try:
             with self.get_session() as session:
-                # Get lever and category names from IDs
-                lever_query = text("SELECT lever_name FROM lever_master WHERE lever_id = :id")
-                kpi_query = text("SELECT category_name FROM category_master WHERE category_id = :id")
-
-                lever_result = session.execute(lever_query, {'id': palanca_id}).fetchone()
-                kpi_result = session.execute(kpi_query, {'id': kpi_id}).fetchone()
-
-                if not lever_result or not kpi_result:
-                    return {
-                        'success': False,
-                        'error': 'Invalid lever_id or kpi_id',
-                        'data': []
-                    }
-
-                lever_name = lever_result.lever_name
-                kpi_name = kpi_result.category_name
-
-                # Get evolution data from view
+                # Get evolution data from view using names directly
                 query = text("""
                     SELECT
                         period_label,
@@ -165,8 +176,8 @@ class UnifiedDatabaseService:
                 """)
 
                 result = session.execute(query, {
-                    'lever': lever_name,
-                    'kpi': kpi_name,
+                    'lever': palanca,
+                    'kpi': kpi,
                     'tipologia': tipologia
                 })
                 rows = result.fetchall()
@@ -185,10 +196,8 @@ class UnifiedDatabaseService:
                 return {
                     'success': True,
                     'data': timeline_data,
-                    'palanca_name': lever_name,
-                    'kpi_name': kpi_name,
-                    'palanca_id': palanca_id,
-                    'kpi_id': kpi_id,
+                    'palanca_name': palanca,
+                    'kpi_name': kpi,
                     'filtered_by': tipologia
                 }
 
@@ -211,18 +220,33 @@ class UnifiedDatabaseService:
                 tipologia_query = text("SELECT typology_name FROM typology_master ORDER BY typology_name")
                 tipologias = [row.typology_name for row in session.execute(tipologia_query)]
 
-                # Get levers
-                palanca_query = text("SELECT lever_name FROM lever_master ORDER BY lever_name")
+                # Get levers (exclude "Control")
+                palanca_query = text("SELECT lever_name FROM lever_master WHERE lever_name != 'Control' ORDER BY lever_name")
                 palancas = [row.lever_name for row in session.execute(palanca_query)]
 
                 # Get categories (KPIs)
                 kpi_query = text("SELECT category_name FROM category_master ORDER BY category_name")
                 kpis = [row.category_name for row in session.execute(kpi_query)]
 
+                # Get data sources
+                fuente_query = text("SELECT source_name FROM data_source_master ORDER BY source_name")
+                fuentes = [row.source_name for row in session.execute(fuente_query)]
+
+                # Get measurement units
+                unidad_query = text("SELECT unit_name FROM measurement_unit_master ORDER BY unit_name")
+                unidades = [row.unit_name for row in session.execute(unidad_query)]
+
+                # Get categories (same as kpi for now)
+                categoria_query = text("SELECT category_name FROM category_master ORDER BY category_name")
+                categorias = [row.category_name for row in session.execute(categoria_query)]
+
                 return {
                     'tipologia': tipologias,
                     'palanca': palancas,
-                    'kpi': kpis
+                    'kpi': kpis,
+                    'fuente_datos': fuentes,
+                    'unidad_medida': unidades,
+                    'categoria': categorias
                 }
 
         except Exception as e:
@@ -230,7 +254,10 @@ class UnifiedDatabaseService:
             return {
                 'tipologia': [],
                 'palanca': [],
-                'kpi': []
+                'kpi': [],
+                'fuente_datos': [],
+                'unidad_medida': [],
+                'categoria': []
             }
 
     # ========================================================================
