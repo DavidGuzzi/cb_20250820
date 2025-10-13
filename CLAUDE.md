@@ -92,9 +92,13 @@ npm run lint
 - **Structured Logging**: JSON logs for production monitoring
 
 #### **UnifiedDatabaseService Methods:**
-- `get_filter_options()` → Returns 6 filter arrays from master tables (excludes "Control" palanca)
+- `get_filter_options()` → Returns 6 filter arrays from master tables with custom ordering (excludes "Control" palanca)
+- `get_palancas_by_tipologia(tipologia)` → Returns palancas filtered by tipologia from store_master
+- `get_fuentes_by_tipologia(tipologia)` → Returns data sources filtered by tipologia from ab_test_result
+- `get_categorias_by_tipologia(tipologia)` → Returns categories filtered by tipologia with custom ordering
 - `get_dashboard_results(tipologia, fuente, unidad, categoria)` → Table data with multiple filters
-- `get_evolution_data(palanca, kpi, tipologia)` → Timeline data (accepts names, not IDs)
+- `get_evolution_timeline_data(tipologia, fuente, unidad, categoria, palanca)` → Timeline data with palanca vs control, starts from first positive value
+- `get_radar_chart_data(tipologia, fuente, unidad, categoria)` → Aggregated data for radar charts (excludes categories 5, 6, 7)
 - `execute_query(sql_query)` → Text-to-SQL execution for chatbot
 - `get_schema_info()` → Schema description for LLM context
 
@@ -107,9 +111,13 @@ npm run lint
 - `POST /api/chat/suggested-questions` - Get AI-generated follow-up questions
 
 **Dashboard:**
-- `GET /api/dashboard/filter-options` - Get dynamic filter options from PostgreSQL master tables
+- `GET /api/dashboard/filter-options` - Get dynamic filter options with custom ordering from PostgreSQL master tables
+- `GET /api/dashboard/palancas-by-tipologia?tipologia=X` - Get palancas filtered by tipologia
+- `GET /api/dashboard/fuentes-by-tipologia?tipologia=X` - Get data sources filtered by tipologia
+- `GET /api/dashboard/categorias-by-tipologia?tipologia=X` - Get categories filtered by tipologia
 - `GET /api/dashboard/results?tipologia=X&fuente=Y&unidad=Z&categoria=W` - Get A/B test results with multiple filters
-- `GET /api/dashboard/evolution-data?palanca=X&kpi=Y&tipologia=Z` - Get timeline chart data (accepts names, not IDs)
+- `GET /api/dashboard/evolution-data?tipologia=X&fuente=Y&unidad=Z&categoria=W&palanca=P` - Get timeline chart data (starts from first positive value, includes project start date)
+- `GET /api/dashboard/radar-data?tipologia=X&fuente=Y&unidad=Z&categoria=W` - Get aggregated radar chart data (excludes categories 5, 6, 7)
 - `GET /api/dashboard/data-summary` - Get data summary and row counts
 
 **Health & Analytics:**
@@ -126,10 +134,13 @@ npm run lint
 - **Modern Dashboard**: Figma-based design with dynamic A/B testing analytics
 
 #### **Dashboard Components:**
-- **Dashboard.tsx**: Main container, manages global filter state (6 filters)
-- **FilterPanel.tsx**: Left sidebar with dynamic filters from PostgreSQL
+- **Dashboard.tsx**: Main container, manages global filter state (5 filters: tipología, palanca, fuente, unidad, categoría)
+- **FilterPanel.tsx**: Left sidebar with dynamic filters from PostgreSQL (tipología-dependent filtering)
+- **ResultsVisualization.tsx**: Toggle between table and radar chart views
 - **ExperimentTable.tsx**: Results table with Source-Category groups and Unit sub-rows
-- **TimelineChart.tsx**: Evolution chart using Recharts (LineChart)
+- **RadarChartContainer.tsx**: Container managing 3 radar charts (one per typology)
+- **RadarChartView.tsx**: Individual radar chart using Recharts with custom tooltips
+- **TimelineChart.tsx**: Evolution chart with palanca vs control lines, starts from first positive value, shows project start marker with arrow
 - **SummaryCards.tsx**: Static summary cards (top-left sidebar)
 
 #### **Table Structure (ExperimentTable):**
@@ -139,6 +150,38 @@ npm run lint
 - **Cell Values**: `difference_vs_control` (colored) + `average_variation` (parentheses)
 - **Percentage Format**: Values multiplied by 100 (0.3 → 30.0%)
 - **Color Logic**: Green for positive, Red for negative
+
+#### **Radar Chart Visualization:**
+- **Dual View System**: Toggle between "Cuadro" (table) and "Visual" (radar charts)
+- **3 Radar Charts**: One per typology (Super e hiper, Conveniencia, Droguerías)
+- **Horizontal Layout**: 1x3 grid showing all typologies side by side
+- **Color-Coded Titles**: Blue (#3b82f6), Green (#10b981), Orange (#f97316)
+- **Data Aggregation**: Averages `difference_vs_control` across all source-category combinations per palanca
+- **Category Filtering**: Excludes Electrolit (ID 5), Powerade (ID 6), Otros (ID 7) from calculations
+- **Enhanced Tooltips**:
+  - Shows palanca name
+  - Breakdown by source-category with individual percentages
+  - Final average (matches radar value)
+  - Color-coded values (green for positive, red for negative)
+- **Smart Label Wrapping**: Long palanca names automatically split into two lines
+- **Filter Independence**: Always shows all 3 typologies regardless of selected filters
+- **NaN Handling**: Converts PostgreSQL NaN values to 0.0 for JSON serialization
+
+#### **Timeline Chart (Evolución Temporal):**
+- **Dual Line Display**: Shows both palanca (treatment) and control group in same chart
+- **Smart Start Point**: Timeline automatically starts from the first positive value of the palanca (control adapts to same date range)
+- **Project Start Marker**: Visual arrow with "Fecha inicio de Palanca" label marking project start date
+  - Calculated as mode (most frequent date) from `store_master.start_date_sellin` or `start_date_sellout`
+  - Color-coded to match tipología (blue, green, or orange)
+  - Custom SVG arrow component for visibility
+- **Date Formatting**: X-axis displays dates in DD/MM format (e.g., "13/01", "20/01") instead of period labels
+- **Color Coding**: Palanca line color matches selected tipología:
+  - Super e hiper: Blue (#3b82f6)
+  - Conveniencia: Green (#10b981)
+  - Droguerías: Orange (#f97316)
+- **Control Line**: Gray (#muted-foreground) dashed line for easy comparison
+- **Required Filters**: Needs all 5 filters (tipología, fuente, unidad, categoría, palanca) to display
+- **Missing Filter Handling**: Shows friendly message indicating which filters are needed
 
 ### Data Layer
 - **PostgreSQL Database**: Unified data source for both Dashboard and Chatbot
@@ -194,31 +237,52 @@ docker-compose -f deploy/docker-compose.prod.yml up -d
 
 ### Dashboard Filter System
 
-The dashboard includes an **enhanced filter system** with dynamic options from PostgreSQL:
+The dashboard includes an **enhanced filter system** with dynamic options and smart filtering from PostgreSQL:
 
-#### **Filter Types:**
-1. **Table Filters** (Impact ExperimentTable):
-   - **Tipología**: Mandatory filter, always active (default: "Super e hiper")
-   - **Fuente de Datos**: Optional filter (Sell In, Sell Out, etc.) - Default: "all"
-   - **Unidad de Medida**: Optional filter (Cajas 8oz, Ventas) - Default: "all"
-   - **Categoría**: Optional filter (Gatorade, Electrolit, etc.) - Default: "all"
+#### **Filter Types (5 filters total):**
+1. **Tipología**: Mandatory filter, always active (default: "Super e hiper")
+   - Custom order: Super e hiper → Conveniencia → Droguerías
+   - Controls all dependent filters (palanca, fuente, categoría)
 
-2. **Timeline Filters** (Impact TimelineChart only):
-   - **Palanca**: Required for timeline (default: "Punta de góndola")
-   - **KPI**: Required for timeline (default: "Cajas 8oz")
+2. **Palanca**: Optional filter (default: empty/no selection)
+   - **Dynamically filtered** by selected tipología
+   - Only shows palancas available for stores of selected tipología
+   - Color-coded by tipología in timeline chart (blue, green, orange)
+
+3. **Fuente de Datos**: Optional filter (default: "all")
+   - **Dynamically filtered** by selected tipología
+   - Only shows sources with data for selected tipología
+   - Example: "Droguerías" excludes "Sell Out - SOM"
+
+4. **Unidad de Medida**: Optional filter (default: "all")
+   - Options: Cajas 8oz, Ventas
+
+5. **Categoría**: Optional filter (default: "all")
+   - **Dynamically filtered** by selected tipología
+   - Custom order: Gatorade → Gatorade 500ml → Gatorade 1000ml → Gatorade Sugar-free → Electrolit → Powerade → Otros
+   - Only shows categories with data for selected tipología
+
+#### **Smart Filter Behavior:**
+- **Auto-reset on tipología change**: When tipología changes, palanca, fuente, and categoría reset to default values
+- **"Control" palanca excluded**: Filter logic excludes "Control" from all palanca options
+- **'all' value handling**: Frontend uses `'all'` for "Todas" option, converted to `undefined` in API calls
+- **Custom ordering**: Tipologías and categorías maintain specific display order regardless of database order
 
 #### **Technical Details:**
 - **All filters are dynamic**: Loaded from PostgreSQL master tables (no hardcoded values)
-- **"Control" palanca excluded**: Filter logic excludes "Control" from palanca options
-- **'all' value handling**: Frontend uses `'all'` for "Todas" option, converted to `undefined` in API calls
+- **Tipología-dependent filtering**: Three endpoints provide filtered options based on tipología:
+  - `/api/dashboard/palancas-by-tipologia?tipologia=X`
+  - `/api/dashboard/fuentes-by-tipologia?tipologia=X`
+  - `/api/dashboard/categorias-by-tipologia?tipologia=X`
 - **SelectItem compatibility**: Uses `value="all"` instead of `value=""` for Radix UI compatibility
 - **Filter persistence**: Global state managed in Dashboard.tsx, propagated to child components
 
 #### **Data Flow:**
-1. `FilterPanel.tsx` → Loads options from `/api/dashboard/filter-options`
-2. `Dashboard.tsx` → Manages filter state with defaults
-3. `ExperimentTable.tsx` → Converts 'all' to undefined, calls `/api/dashboard/results`
-4. `TimelineChart.tsx` → Uses palanca/kpi names directly (no ID conversion)
+1. `FilterPanel.tsx` → Loads initial options from `/api/dashboard/filter-options`
+2. `FilterPanel.tsx` → When tipología changes, loads filtered options from tipología-specific endpoints
+3. `Dashboard.tsx` → Manages filter state with defaults and propagates to children
+4. `ExperimentTable.tsx` → Converts 'all' to undefined, calls `/api/dashboard/results`
+5. `TimelineChart.tsx` → Uses all 5 filters to load evolution data
 
 ### Intelligent Suggested Questions System
 
@@ -387,18 +451,94 @@ PORT=8080
 
 ## Cloud Run Deployment
 
-### Quick Deploy:
+### Prerequisites:
+1. Install [Google Cloud SDK](https://cloud.google.com/sdk/docs/install)
+2. Authenticate: `gcloud auth login`
+3. Set your project: `gcloud config set project YOUR_PROJECT_ID`
+4. Create `.env` file with `OPENAI_API_KEY` (see `.env.example`)
+
+### Quick Deploy (Recommended):
 ```bash
-./deploy-cloudrun.sh
+# Option 1: Automatic .env loading + enhanced deployment
+./deploy.sh
+
+# Option 2: Manual environment variable + enhanced deployment
+export OPENAI_API_KEY=your-key-here
+./deploy-app.sh
+
+# Option 3: Set region (default: us-central1)
+REGION=us-west1 ./deploy.sh
 ```
 
-### Manual Deploy:
-```bash
-# Backend
-gcloud builds submit ./backend --tag gcr.io/PROJECT_ID/retail-backend
-gcloud run deploy retail-backend --image gcr.io/PROJECT_ID/retail-backend --region us-central1
+**What happens during deployment:**
+- ✅ Pre-deployment health checks
+- ✅ Backend deployment (builds + deploys to Cloud Run)
+- ✅ Frontend deployment (builds with backend URL + deploys)
+- ✅ Post-deployment validation
+- ✅ Detailed logging to `deployment-YYYYMMDD-HHMMSS.log`
 
-# Frontend  
-gcloud builds submit ./frontend --tag gcr.io/PROJECT_ID/retail-frontend
-gcloud run deploy retail-frontend --image gcr.io/PROJECT_ID/retail-frontend --region us-central1
+### Check Deployment Status:
+```bash
+./deployment-status.sh
 ```
+
+### Manual Deploy (Advanced):
+```bash
+# 1. Configure project
+gcloud config set project DG-firstApp
+
+# 2. Deploy backend
+./deploy-backend-cloudrun.sh
+
+# 3. Get backend URL and deploy frontend
+export BACKEND_URL=$(gcloud run services describe retail-backend --region=us-central1 --format="value(status.url)")
+./deploy-frontend-cloudrun.sh
+```
+
+### Deployment Files:
+- **`deploy.sh`** - Wrapper that auto-loads `.env` and calls `deploy-app.sh`
+- **`deploy-app.sh`** - Enhanced deployment script with logging, validation, and monitoring
+- **`deploy-backend-cloudrun.sh`** - Backend-specific deployment
+- **`deploy-frontend-cloudrun.sh`** - Frontend-specific deployment
+- **`deployment-status.sh`** - Quick status check for deployed services
+- **`.gcloudignore`** - Files excluded from Cloud Build (in `backend/` and `frontend/`)
+
+### Troubleshooting:
+```bash
+# View logs
+gcloud run logs tail retail-backend --region=us-central1
+gcloud run logs tail retail-frontend --region=us-central1
+
+# Test endpoints
+curl https://retail-backend-xxx.run.app/api/health
+curl https://retail-frontend-xxx.run.app
+```
+
+---
+
+## Recent Updates (2025-10-12)
+
+### Timeline Chart Enhancements
+- **Smart Start Point**: Chart now begins from first positive palanca value
+- **Project Start Marker**: Visual arrow indicator showing "Fecha inicio de Palanca"
+  - Calculated using mode of store start dates from `store_master`
+  - Color-coded to match tipología
+- **Date Display**: X-axis shows DD/MM format dates instead of period labels
+- **Color Consistency**: Palanca line color matches tipología across all visualizations
+
+### Dynamic Filter System
+- **KPI Filter Removed**: Simplified to 5 core filters (tipología, palanca, fuente, unidad, categoría)
+- **Tipología-Dependent Filtering**: Palanca, fuente, and categoría now filter dynamically based on selected tipología
+  - New backend methods: `get_palancas_by_tipologia()`, `get_fuentes_by_tipologia()`, `get_categorias_by_tipologia()`
+  - New API endpoints for filtered options
+  - Example: "Droguerías" only shows relevant data sources
+- **Auto-Reset**: Changing tipología automatically resets dependent filters to default values
+- **Custom Ordering**:
+  - Tipologías: Super e hiper → Conveniencia → Droguerías
+  - Categorías: Gatorade → Gatorade 500ml → Gatorade 1000ml → Gatorade Sugar-free → Electrolit → Powerade → Otros
+
+### Technical Improvements
+- **Backend**: Added three new service methods for tipología-based filtering
+- **API**: Three new GET endpoints for dynamic filter options
+- **Frontend**: Enhanced FilterPanel with smart state management and auto-refresh on tipología change
+- **Performance**: Filters load only relevant options, reducing UI clutter and improving UX

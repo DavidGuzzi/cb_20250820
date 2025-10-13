@@ -175,14 +175,9 @@ export function ExperimentTable({ filters }: ExperimentTableProps) {
   };
 
   return (
-    <Card className="h-full bg-card shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-foreground">
-          Resultados por Fuente-Categoría y Palanca - {filters.tipologia}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="h-[calc(100%-60px)] p-0">
-        <ScrollArea className="h-full px-6 pb-6">
+    <Card className="h-full bg-card shadow-sm border-0 shadow-none">
+      <CardContent className="h-full p-0">
+        <ScrollArea className="h-full px-6 pb-6 pt-3">
           <Table>
             <TableHeader>
               <TableRow>

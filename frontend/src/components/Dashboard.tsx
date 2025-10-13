@@ -4,7 +4,7 @@ import { Sun, Moon, BarChart3, MessageSquare, LogOut } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { SummaryCards } from './SummaryCards';
 import { FilterPanel } from './FilterPanel';
-import { ExperimentTable } from './ExperimentTable';
+import { ResultsVisualization } from './ResultsVisualization';
 import { TimelineChart } from './TimelineChart';
 import gatoradeLogo from '../assets/4de2379cad6c1c3cdddbd220d1ac6ce242ae078f.png';
 import gatoradeLogoDark from '../assets/0ebfb34dd11ac7b6cf64b19c7b02742c273e0b93.png';
@@ -20,8 +20,7 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
   const { theme, toggleTheme } = useTheme();
   const [filters, setFilters] = useState({
     tipologia: 'Super e hiper', // Default tipologia
-    palanca: 'Punta de góndola', // Default palanca (solo para timeline)
-    kpi: '', // Default kpi (solo para timeline)
+    palanca: '', // Sin palanca seleccionada por defecto
     fuente: 'all', // Default fuente (all = sin filtro)
     unidad: 'all', // Default unidad (all = sin filtro)
     categoria: 'all' // Default categoria (all = sin filtro)
@@ -124,14 +123,11 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col p-6 gap-4 bg-background">
-          {/* Table Section - Takes 55% of height */}
+          {/* Results Section (Table/Radar) - Takes 55% of height */}
           <div className="flex-[1.1] min-h-0">
-            <h2 className="mb-3 text-foreground font-bold text-xl">Tabla de Resultados</h2>
-            <div className="h-[calc(100%-2.5rem)]">
-              <ExperimentTable filters={filters} />
-            </div>
+            <ResultsVisualization filters={filters} />
           </div>
-          
+
           {/* Chart Section - Takes 45% of height */}
           <div className="flex-[0.9] min-h-0">
             <h2 className="mb-2 text-foreground font-bold text-xl">Evolución Temporal</h2>

@@ -6,6 +6,7 @@ Provides unified access for both Dashboard and Chatbot
 
 import os
 import logging
+import math
 from typing import Dict, List, Any, Optional
 from contextlib import contextmanager
 from sqlalchemy import create_engine, text, MetaData
@@ -107,13 +108,37 @@ class UnifiedDatabaseService:
                 # Convert to dict format expected by frontend
                 data = []
                 for row in rows:
+                    # Handle NaN/None values for average_variation
+                    avg_var = row.average_variation
+                    if avg_var is None:
+                        avg_var_value = 0.0
+                    else:
+                        try:
+                            avg_var_value = float(avg_var)
+                            if math.isnan(avg_var_value):
+                                avg_var_value = 0.0
+                        except (ValueError, TypeError):
+                            avg_var_value = 0.0
+
+                    # Handle NaN/None values for difference_vs_control
+                    diff_control = row.difference_vs_control
+                    if diff_control is None:
+                        diff_control_value = 0.0
+                    else:
+                        try:
+                            diff_control_value = float(diff_control)
+                            if math.isnan(diff_control_value):
+                                diff_control_value = 0.0
+                        except (ValueError, TypeError):
+                            diff_control_value = 0.0
+
                     data.append({
                         'source': row.source_name,
                         'category': row.category_name,
                         'unit': row.unit_name,
                         'palanca': row.lever_name,
-                        'variacion_promedio': float(row.average_variation) if row.average_variation else 0,
-                        'diferencia_vs_control': float(row.difference_vs_control) if row.difference_vs_control else 0
+                        'variacion_promedio': avg_var_value,
+                        'diferencia_vs_control': diff_control_value
                     })
 
                 # Extract unique palancas, sources, categories, and units
@@ -209,6 +234,347 @@ class UnifiedDatabaseService:
                 'data': []
             }
 
+    def get_evolution_timeline_data(
+        self,
+        tipologia: Optional[str] = None,
+        fuente: Optional[str] = None,
+        unidad: Optional[str] = None,
+        categoria: Optional[str] = None,
+        palanca: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Obtiene datos de evolución temporal desde ab_test_result
+        con líneas separadas para palanca y control
+        Compatible con endpoint: /api/dashboard/evolution-data
+
+        Requiere 5 filtros obligatorios:
+        - tipologia, fuente, unidad, categoria, palanca
+        """
+        try:
+            # Check for missing filters
+            missing_filters = []
+            filter_labels = {
+                'tipologia': 'Tipología',
+                'fuente': 'Fuente de Datos',
+                'unidad': 'Unidad de Medida',
+                'categoria': 'Categoría',
+                'palanca': 'Palanca'
+            }
+
+            if not tipologia:
+                missing_filters.append(filter_labels['tipologia'])
+            if not fuente:
+                missing_filters.append(filter_labels['fuente'])
+            if not unidad:
+                missing_filters.append(filter_labels['unidad'])
+            if not categoria:
+                missing_filters.append(filter_labels['categoria'])
+            if not palanca:
+                missing_filters.append(filter_labels['palanca'])
+
+            # Return early if filters are missing
+            if missing_filters:
+                return {
+                    'success': False,
+                    'message': 'Filtros faltantes para mostrar evolución',
+                    'missing_filters': missing_filters,
+                    'data': []
+                }
+
+            with self.get_session() as session:
+                # Query 0: Calculate project start date (mode) based on data source
+                # Determine which start_date column to use
+                start_date_column = 'start_date_sellin' if fuente == 'Sell In' else 'start_date_sellout'
+
+                project_start_query = text(f"""
+                    SELECT {start_date_column} as start_date, COUNT(*) as count
+                    FROM store_master s
+                    JOIN typology_master t ON s.typology_id = t.typology_id
+                    JOIN lever_master l ON s.lever_id = l.lever_id
+                    WHERE t.typology_name = :tipologia
+                      AND l.lever_name = :palanca
+                      AND s.is_active = TRUE
+                      AND {start_date_column} IS NOT NULL
+                    GROUP BY {start_date_column}
+                    ORDER BY count DESC, {start_date_column}
+                    LIMIT 1
+                """)
+
+                project_start_result = session.execute(project_start_query, {
+                    'tipologia': tipologia,
+                    'palanca': palanca
+                })
+                project_start_row = project_start_result.fetchone()
+                project_start_date = project_start_row.start_date if project_start_row else None
+
+                # Query 1: Get palanca data (avg value per period for selected lever)
+                palanca_query = text("""
+                    SELECT
+                        p.period_label,
+                        p.start_date,
+                        p.end_date,
+                        AVG(r.value) as avg_value
+                    FROM ab_test_result r
+                    JOIN store_master s ON r.store_id = s.id
+                    JOIN lever_master l ON s.lever_id = l.lever_id
+                    JOIN period_master p ON r.period_id = p.period_id
+                    JOIN typology_master t ON s.typology_id = t.typology_id
+                    JOIN data_source_master ds ON r.source_id = ds.source_id
+                    JOIN measurement_unit_master u ON r.unit_id = u.unit_id
+                    JOIN category_master c ON r.category_id = c.category_id
+                    WHERE l.lever_name = :palanca
+                      AND t.typology_name = :tipologia
+                      AND ds.source_name = :fuente
+                      AND u.unit_name = :unidad
+                      AND c.category_name = :categoria
+                      AND s.is_active = TRUE
+                    GROUP BY p.period_label, p.start_date, p.end_date
+                    ORDER BY p.start_date
+                """)
+
+                palanca_result = session.execute(palanca_query, {
+                    'palanca': palanca,
+                    'tipologia': tipologia,
+                    'fuente': fuente,
+                    'unidad': unidad,
+                    'categoria': categoria
+                })
+                palanca_rows = palanca_result.fetchall()
+
+                # Query 2: Get control data (avg value per period for control group in same typology)
+                control_query = text("""
+                    SELECT
+                        p.period_label,
+                        p.start_date,
+                        p.end_date,
+                        AVG(r.value) as avg_value
+                    FROM ab_test_result r
+                    JOIN store_master s ON r.store_id = s.id
+                    JOIN lever_master l ON s.lever_id = l.lever_id
+                    JOIN period_master p ON r.period_id = p.period_id
+                    JOIN typology_master t ON s.typology_id = t.typology_id
+                    JOIN data_source_master ds ON r.source_id = ds.source_id
+                    JOIN measurement_unit_master u ON r.unit_id = u.unit_id
+                    JOIN category_master c ON r.category_id = c.category_id
+                    WHERE l.lever_name = 'Control'
+                      AND t.typology_name = :tipologia
+                      AND ds.source_name = :fuente
+                      AND u.unit_name = :unidad
+                      AND c.category_name = :categoria
+                      AND s.is_active = TRUE
+                    GROUP BY p.period_label, p.start_date, p.end_date
+                    ORDER BY p.start_date
+                """)
+
+                control_result = session.execute(control_query, {
+                    'tipologia': tipologia,
+                    'fuente': fuente,
+                    'unidad': unidad,
+                    'categoria': categoria
+                })
+                control_rows = control_result.fetchall()
+
+                # Find the first period with positive palanca value
+                first_positive_date = None
+                for row in palanca_rows:
+                    if row.avg_value and float(row.avg_value) > 0:
+                        first_positive_date = row.start_date
+                        break
+
+                # Build dictionaries for easy lookup by period_label
+                palanca_dict = {}
+                for row in palanca_rows:
+                    # Only include periods from first positive value onwards
+                    if first_positive_date and row.start_date >= first_positive_date:
+                        palanca_dict[row.period_label] = {
+                            'value': float(row.avg_value) if row.avg_value else 0.0,
+                            'start_date': row.start_date,
+                            'end_date': row.end_date
+                        }
+
+                control_dict = {}
+                for row in control_rows:
+                    # Only include periods from first positive value onwards
+                    if first_positive_date and row.start_date >= first_positive_date:
+                        control_dict[row.period_label] = {
+                            'value': float(row.avg_value) if row.avg_value else 0.0,
+                            'start_date': row.start_date,
+                            'end_date': row.end_date
+                        }
+
+                # Get all unique periods (only from first positive onwards)
+                all_periods = {}
+                for period_label, data in palanca_dict.items():
+                    all_periods[period_label] = data
+                for period_label, data in control_dict.items():
+                    if period_label not in all_periods:
+                        all_periods[period_label] = data
+
+                # Sort periods by start_date
+                sorted_periods = sorted(all_periods.items(), key=lambda x: x[1]['start_date'])
+
+                # Build combined timeline data
+                timeline_data = []
+                for period_label, period_info in sorted_periods:
+                    palanca_value = palanca_dict.get(period_label, {}).get('value', None)
+                    control_value = control_dict.get(period_label, {}).get('value', None)
+                    start_date = period_info['start_date']
+
+                    # Format date as DD/MM
+                    date_formatted = start_date.strftime('%d/%m') if start_date else period_label
+
+                    timeline_data.append({
+                        'period': period_label,
+                        'period_label': period_label,
+                        'start_date': start_date.isoformat() if start_date else None,
+                        'date_formatted': date_formatted,
+                        'palanca_value': palanca_value,
+                        'control_value': control_value
+                    })
+
+                # Format project start date as DD/MM for frontend
+                project_start_formatted = project_start_date.strftime('%d/%m') if project_start_date else None
+
+                return {
+                    'success': True,
+                    'data': timeline_data,
+                    'palanca_name': palanca,
+                    'tipologia': tipologia,
+                    'project_start_date': project_start_date.isoformat() if project_start_date else None,
+                    'project_start_formatted': project_start_formatted,
+                    'filtered_by': {
+                        'tipologia': tipologia,
+                        'fuente': fuente,
+                        'unidad': unidad,
+                        'categoria': categoria,
+                        'palanca': palanca
+                    }
+                }
+
+        except Exception as e:
+            logger.error(f"Error in get_evolution_timeline_data: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'data': []
+            }
+
+    def get_palancas_by_tipologia(self, tipologia: str) -> Dict[str, Any]:
+        """
+        Get palancas filtered by tipologia
+        Returns only palancas that exist in stores with the specified tipologia
+        Compatible with: /api/dashboard/palancas-by-tipologia
+        """
+        try:
+            with self.get_session() as session:
+                # Get palancas used by stores of the specified tipologia
+                query = text("""
+                    SELECT DISTINCT l.lever_name
+                    FROM store_master s
+                    JOIN lever_master l ON s.lever_id = l.lever_id
+                    JOIN typology_master t ON s.typology_id = t.typology_id
+                    WHERE t.typology_name = :tipologia
+                      AND l.lever_name != 'Control'
+                      AND s.is_active = TRUE
+                    ORDER BY l.lever_name
+                """)
+
+                result = session.execute(query, {'tipologia': tipologia})
+                palancas = [row.lever_name for row in result.fetchall()]
+
+                return {
+                    'success': True,
+                    'palancas': palancas,
+                    'tipologia': tipologia
+                }
+
+        except Exception as e:
+            logger.error(f"Error in get_palancas_by_tipologia: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'palancas': []
+            }
+
+    def get_fuentes_by_tipologia(self, tipologia: str) -> Dict[str, Any]:
+        """
+        Get data sources filtered by tipologia
+        Returns only sources that have data for the specified tipologia
+        Compatible with: /api/dashboard/fuentes-by-tipologia
+        """
+        try:
+            with self.get_session() as session:
+                # Get data sources that have results for this tipologia
+                query = text("""
+                    SELECT DISTINCT ds.source_name
+                    FROM ab_test_result r
+                    JOIN store_master s ON r.store_id = s.id
+                    JOIN typology_master t ON s.typology_id = t.typology_id
+                    JOIN data_source_master ds ON r.source_id = ds.source_id
+                    WHERE t.typology_name = :tipologia
+                      AND s.is_active = TRUE
+                    ORDER BY ds.source_name
+                """)
+
+                result = session.execute(query, {'tipologia': tipologia})
+                fuentes = [row.source_name for row in result.fetchall()]
+
+                return {
+                    'success': True,
+                    'fuentes': fuentes,
+                    'tipologia': tipologia
+                }
+
+        except Exception as e:
+            logger.error(f"Error in get_fuentes_by_tipologia: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'fuentes': []
+            }
+
+    def get_categorias_by_tipologia(self, tipologia: str) -> Dict[str, Any]:
+        """
+        Get categories filtered by tipologia
+        Returns only categories that have data for the specified tipologia
+        Compatible with: /api/dashboard/categorias-by-tipologia
+        """
+        try:
+            with self.get_session() as session:
+                # Get categories that have results for this tipologia
+                query = text("""
+                    SELECT DISTINCT c.category_name
+                    FROM ab_test_result r
+                    JOIN store_master s ON r.store_id = s.id
+                    JOIN typology_master t ON s.typology_id = t.typology_id
+                    JOIN category_master c ON r.category_id = c.category_id
+                    WHERE t.typology_name = :tipologia
+                      AND s.is_active = TRUE
+                """)
+
+                result = session.execute(query, {'tipologia': tipologia})
+                categorias_raw = [row.category_name for row in result.fetchall()]
+
+                # Apply custom order
+                categoria_order = ['Gatorade', 'Gatorade 500ml', 'Gatorade 1000ml', 'Gatorade Sugar-free', 'Electrolit', 'Powerade', 'Otros']
+                categorias = [c for c in categoria_order if c in categorias_raw]
+                # Add any remaining categories not in the custom order
+                categorias.extend([c for c in categorias_raw if c not in categoria_order])
+
+                return {
+                    'success': True,
+                    'categorias': categorias,
+                    'tipologia': tipologia
+                }
+
+        except Exception as e:
+            logger.error(f"Error in get_categorias_by_tipologia: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'categorias': []
+            }
+
     def get_filter_options(self) -> Dict[str, List[str]]:
         """
         Get filter options for dashboard
@@ -217,16 +583,28 @@ class UnifiedDatabaseService:
         try:
             with self.get_session() as session:
                 # Get typologies
-                tipologia_query = text("SELECT typology_name FROM typology_master ORDER BY typology_name")
-                tipologias = [row.typology_name for row in session.execute(tipologia_query)]
+                tipologia_query = text("SELECT typology_name FROM typology_master")
+                tipologias_raw = [row.typology_name for row in session.execute(tipologia_query)]
+
+                # Custom order for tipologías
+                tipologia_order = ['Super e hiper', 'Conveniencia', 'Droguerías']
+                tipologias = [t for t in tipologia_order if t in tipologias_raw]
+                # Add any remaining tipologías not in the custom order
+                tipologias.extend([t for t in tipologias_raw if t not in tipologia_order])
 
                 # Get levers (exclude "Control")
                 palanca_query = text("SELECT lever_name FROM lever_master WHERE lever_name != 'Control' ORDER BY lever_name")
                 palancas = [row.lever_name for row in session.execute(palanca_query)]
 
                 # Get categories (KPIs)
-                kpi_query = text("SELECT category_name FROM category_master ORDER BY category_name")
-                kpis = [row.category_name for row in session.execute(kpi_query)]
+                kpi_query = text("SELECT category_name FROM category_master")
+                kpis_raw = [row.category_name for row in session.execute(kpi_query)]
+
+                # Custom order for categorías
+                categoria_order = ['Gatorade', 'Gatorade 500ml', 'Gatorade 1000ml', 'Gatorade Sugar-free', 'Electrolit', 'Powerade', 'Otros']
+                kpis = [c for c in categoria_order if c in kpis_raw]
+                # Add any remaining categories not in the custom order
+                kpis.extend([c for c in kpis_raw if c not in categoria_order])
 
                 # Get data sources
                 fuente_query = text("SELECT source_name FROM data_source_master ORDER BY source_name")
@@ -236,9 +614,8 @@ class UnifiedDatabaseService:
                 unidad_query = text("SELECT unit_name FROM measurement_unit_master ORDER BY unit_name")
                 unidades = [row.unit_name for row in session.execute(unidad_query)]
 
-                # Get categories (same as kpi for now)
-                categoria_query = text("SELECT category_name FROM category_master ORDER BY category_name")
-                categorias = [row.category_name for row in session.execute(categoria_query)]
+                # Get categories (same as kpi with same custom order)
+                categorias = kpis  # Use the same ordered list
 
                 return {
                     'tipologia': tipologias,
@@ -258,6 +635,118 @@ class UnifiedDatabaseService:
                 'fuente_datos': [],
                 'unidad_medida': [],
                 'categoria': []
+            }
+
+    def get_radar_chart_data(
+        self,
+        tipologia: Optional[str] = None,
+        fuente: Optional[str] = None,
+        unidad: Optional[str] = None,
+        categoria: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Obtiene datos agregados para Radar Chart
+        Compatible con endpoint: /api/dashboard/radar-data
+
+        Si tipologia='all' o None, retorna datos para todas las tipologías (modo comparativo)
+        Si tipologia específica, retorna solo datos para esa tipología
+        """
+        try:
+            with self.get_session() as session:
+                # Build dynamic query based on tipologia filter
+                if tipologia and tipologia != 'all':
+                    # Single typology mode
+                    query = text("""
+                        SELECT
+                            t.typology_name as tipologia,
+                            l.lever_name as palanca,
+                            AVG(s.difference_vs_control) as avg_score
+                        FROM ab_test_summary s
+                        JOIN typology_master t ON s.typology_id = t.typology_id
+                        JOIN lever_master l ON s.lever_id = l.lever_id
+                        WHERE l.lever_name != 'Control'
+                          AND t.typology_name = :tipologia
+                          AND s.category_id NOT IN (5, 6, 7)
+                          AND (:fuente IS NULL OR s.source_id = (SELECT source_id FROM data_source_master WHERE source_name = :fuente))
+                          AND (:unidad IS NULL OR s.unit_id = (SELECT unit_id FROM measurement_unit_master WHERE unit_name = :unidad))
+                          AND (:categoria IS NULL OR s.category_id = (SELECT category_id FROM category_master WHERE category_name = :categoria))
+                        GROUP BY t.typology_name, l.lever_name
+                        ORDER BY l.lever_name
+                    """)
+                else:
+                    # Comparative mode (all typologies)
+                    query = text("""
+                        SELECT
+                            t.typology_name as tipologia,
+                            l.lever_name as palanca,
+                            AVG(s.difference_vs_control) as avg_score
+                        FROM ab_test_summary s
+                        JOIN typology_master t ON s.typology_id = t.typology_id
+                        JOIN lever_master l ON s.lever_id = l.lever_id
+                        WHERE l.lever_name != 'Control'
+                          AND s.category_id NOT IN (5, 6, 7)
+                          AND (:fuente IS NULL OR s.source_id = (SELECT source_id FROM data_source_master WHERE source_name = :fuente))
+                          AND (:unidad IS NULL OR s.unit_id = (SELECT unit_id FROM measurement_unit_master WHERE unit_name = :unidad))
+                          AND (:categoria IS NULL OR s.category_id = (SELECT category_id FROM category_master WHERE category_name = :categoria))
+                        GROUP BY t.typology_name, l.lever_name
+                        ORDER BY t.typology_name, l.lever_name
+                    """)
+
+                result = session.execute(query, {
+                    'tipologia': tipologia if tipologia != 'all' else None,
+                    'fuente': fuente,
+                    'unidad': unidad,
+                    'categoria': categoria
+                })
+                rows = result.fetchall()
+
+                # Convert to list of dicts
+                data = []
+                for row in rows:
+                    # Handle NaN/None values properly for JSON serialization
+                    avg_score = row.avg_score
+                    if avg_score is None:
+                        avg_score_value = 0.0
+                    else:
+                        try:
+                            avg_score_value = float(avg_score)
+                            # Check if it's NaN and convert to 0 (math.isnan is more reliable)
+                            if math.isnan(avg_score_value):
+                                avg_score_value = 0.0
+                        except (ValueError, TypeError):
+                            avg_score_value = 0.0
+
+                    data.append({
+                        'tipologia': row.tipologia,
+                        'palanca': row.palanca,
+                        'avg_score': avg_score_value
+                    })
+
+                # Extract unique tipologias and palancas
+                tipologias = sorted(list(set(item['tipologia'] for item in data)))
+                palancas = sorted(list(set(item['palanca'] for item in data)))
+
+                return {
+                    'success': True,
+                    'data': data,
+                    'tipologias': tipologias,
+                    'palancas': palancas,
+                    'filtered_by': {
+                        'tipologia': tipologia,
+                        'fuente': fuente,
+                        'unidad': unidad,
+                        'categoria': categoria
+                    }
+                }
+
+        except Exception as e:
+            logger.error(f"Error in get_radar_chart_data: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'data': [],
+                'tipologias': [],
+                'palancas': []
             }
 
     # ========================================================================

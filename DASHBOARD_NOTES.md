@@ -1,6 +1,6 @@
 # Dashboard Implementation Notes
 
-## Current Implementation (Updated: October 2025)
+## Current Implementation (Updated: October 12, 2025)
 
 ### Filter System Architecture
 
@@ -81,6 +81,52 @@ GET /api/dashboard/evolution-data?palanca=Punta de góndola&kpi=Cajas 8oz&tipolo
 4. `TimelineChart.tsx` - Removed maestro-mappings dependency
 5. `api.ts` - Updated interfaces for name-based queries
 
+### Radar Chart Visualization
+
+**Toggle System:**
+- Elegant tabs toggle: "Cuadro" and "Visual"
+- Positioned left side of card header next to dynamic title
+- Smooth transitions with Tailwind CSS
+
+**3 Radar Charts Layout:**
+- **Horizontal grid (1x3)**: All typologies side by side
+- **Independent radars**: One per tipología with color-coded titles
+- **Colors**:
+  - Super e hiper: Blue (#3b82f6)
+  - Conveniencia: Green (#10b981)
+  - Droguerías: Orange (#f97316)
+
+**Data Aggregation:**
+- **Source**: `get_radar_chart_data()` in `unified_database_service.py`
+- **Calculation**: `AVG(difference_vs_control)` grouped by tipología and palanca
+- **Category Exclusions**: Filters out categories 5, 6, 7 (Electrolit, Powerade, Otros)
+- **SQL Filter**: `WHERE s.category_id NOT IN (5, 6, 7)`
+
+**Visual Enhancements:**
+- **Titles**: text-base, font-bold, colored (removed legend from bottom)
+- **Palanca Labels**: Bold font with custom line-wrapping component
+- **Smart Wrapping**: Labels >2 words split into two lines
+- **NaN Handling**: Backend converts NaN to 0.0 using `math.isnan()`
+
+**Enhanced Tooltips:**
+- Shows palanca name as header
+- Lists all source-category combinations with individual percentages
+- Excludes Electrolit, Powerade, Otros in frontend filter
+- Displays final average (matches radar value)
+- Color-coded values: green (positive), red (negative)
+
+**Filter Independence:**
+- Radar data ALWAYS fetches all 3 tipologías
+- Ignores tipología, fuente, unidad, categoria filters
+- Only loads once on component mount
+- Endpoint: `GET /api/dashboard/radar-data?tipologia=all`
+
+**Technical Components:**
+1. `ResultsVisualization.tsx` - Parent with toggle
+2. `RadarChartContainer.tsx` - Manages 3 radars and detailed data
+3. `RadarChartView.tsx` - Individual radar with Recharts
+4. Uses Recharts: `RadarChart`, `PolarGrid`, `PolarAngleAxis`, `Radar`, `Tooltip`
+
 ### Common Issues & Solutions
 
 **Issue 1: SelectItem Error**
@@ -99,6 +145,16 @@ GET /api/dashboard/evolution-data?palanca=Punta de góndola&kpi=Cajas 8oz&tipolo
 - Problem: Old system tried to fetch non-existent endpoint
 - Solution: Use names directly, removed ID conversion logic
 
+**Issue 5: NaN in JSON Response**
+- Problem: PostgreSQL returns NaN when insufficient data for calculations
+- Solution: Backend uses `math.isnan()` to detect and convert to 0.0
+- Affected: Both `get_dashboard_results()` and `get_radar_chart_data()`
+
+**Issue 6: Radar Labels Cut Off**
+- Problem: Long palanca names truncated at edges
+- Solution: Custom `CustomTick` component with intelligent line splitting
+- Logic: Names ≤2 words → one line, >2 words → two lines
+
 ### Future Improvements
 
 - [ ] Add control group data to timeline (currently null)
@@ -106,3 +162,5 @@ GET /api/dashboard/evolution-data?palanca=Punta de góndola&kpi=Cajas 8oz&tipolo
 - [ ] Add loading skeletons for better UX
 - [ ] Export table data to Excel/CSV
 - [ ] Add drill-down capability in table rows
+- [ ] Consider adding zoom/fullscreen for radar charts
+- [ ] Add export functionality for radar chart data

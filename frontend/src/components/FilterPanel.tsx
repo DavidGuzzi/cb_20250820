@@ -9,7 +9,6 @@ interface FilterPanelProps {
   filters: {
     tipologia: string;
     palanca: string;
-    kpi: string;
     fuente: string;
     unidad: string;
     categoria: string;
@@ -21,13 +20,16 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
   const [filterOptions, setFilterOptions] = useState({
     tipologia: ['Super e hiper'],
     palanca: [],
-    kpi: [],
     fuente_datos: [],
     unidad_medida: [],
     categoria: []
   });
+  const [palancasByTipologia, setPalancasByTipologia] = useState<string[]>([]);
+  const [fuentesByTipologia, setFuentesByTipologia] = useState<string[]>([]);
+  const [categoriasByTipologia, setCategoriasByTipologia] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Load general filter options on mount
   useEffect(() => {
     const loadFilterOptions = async () => {
       try {
@@ -36,19 +38,12 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
         if (response.success) {
           setFilterOptions(response.options);
 
-          // Set defaults for all filters if not already set
+          // Set default tipologia if not already set
           const newFilters = { ...filters };
           let hasChanges = false;
 
-          // Set default tipologia if not already set
           if (!newFilters.tipologia && response.options.tipologia?.length > 0) {
             newFilters.tipologia = response.options.tipologia.find((t: string) => t === 'Super e hiper') || response.options.tipologia[0];
-            hasChanges = true;
-          }
-
-          // Set default palanca if not already set (solo para timeline)
-          if (!newFilters.palanca && response.options.palanca?.length > 0) {
-            newFilters.palanca = response.options.palanca.find((p: string) => p === 'Punta de góndola') || response.options.palanca[0];
             hasChanges = true;
           }
 
@@ -62,7 +57,6 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
         setFilterOptions({
           tipologia: ['Super e hiper', 'Conveniencia', 'Droguerías'],
           palanca: [],
-          kpi: [],
           fuente_datos: [],
           unidad_medida: [],
           categoria: []
@@ -74,19 +68,59 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
 
     loadFilterOptions();
   }, []);
+
+  // Load palancas, fuentes, and categorias filtered by tipologia whenever tipologia changes
+  useEffect(() => {
+    const loadFilteredOptions = async () => {
+      if (!filters.tipologia) return;
+
+      try {
+        // Load palancas
+        const palancasResponse = await apiService.getPalancasByTipologia(filters.tipologia);
+        if (palancasResponse.success) {
+          setPalancasByTipologia(palancasResponse.palancas || []);
+        }
+
+        // Load fuentes
+        const fuentesResponse = await apiService.getFuentesByTipologia(filters.tipologia);
+        if (fuentesResponse.success) {
+          setFuentesByTipologia(fuentesResponse.fuentes || []);
+        }
+
+        // Load categorias
+        const categoriasResponse = await apiService.getCategoriasByTipologia(filters.tipologia);
+        if (categoriasResponse.success) {
+          setCategoriasByTipologia(categoriasResponse.categorias || []);
+        }
+      } catch (error) {
+        console.error('Error loading filtered options for tipologia:', error);
+        setPalancasByTipologia([]);
+        setFuentesByTipologia([]);
+        setCategoriasByTipologia([]);
+      }
+    };
+
+    loadFilteredOptions();
+  }, [filters.tipologia]);
   
   const updateFilter = (key: string, value: string) => {
-    onFiltersChange({ ...filters, [key]: value });
+    const newFilters = { ...filters, [key]: value };
+
+    // Si cambia la tipología, limpiar las selecciones dependientes
+    if (key === 'tipologia') {
+      newFilters.palanca = '';
+      newFilters.fuente = 'all';
+      newFilters.categoria = 'all';
+    }
+
+    onFiltersChange(newFilters);
   };
 
   const clearFilters = () => {
     // Reset to default values
-    const defaultPalanca = filterOptions.palanca.find((p: string) => p === 'Punta de góndola') || filterOptions.palanca[0] || '';
-
     onFiltersChange({
       tipologia: 'Super e hiper',
-      palanca: defaultPalanca,
-      kpi: '',
+      palanca: '',
       fuente: 'all',
       unidad: 'all',
       categoria: 'all'
@@ -94,11 +128,8 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
   };
 
   // Check if filters are different from their default values
-  const defaultPalanca = filterOptions.palanca.find((p: string) => p === 'Punta de góndola') || filterOptions.palanca[0] || '';
-
   const hasActiveFilters = filters.tipologia !== 'Super e hiper' ||
-                          filters.palanca !== defaultPalanca ||
-                          filters.kpi !== '' ||
+                          filters.palanca !== '' ||
                           filters.fuente !== 'all' ||
                           filters.unidad !== 'all' ||
                           filters.categoria !== 'all';
@@ -142,13 +173,13 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
 
         <div>
           <Label htmlFor="fuente" className="text-xs text-muted-foreground mb-1 block">Fuente de Datos</Label>
-          <Select value={filters.fuente} onValueChange={(value) => updateFilter('fuente', value)} disabled={loading}>
+          <Select value={filters.fuente} onValueChange={(value) => updateFilter('fuente', value)} disabled={loading || fuentesByTipologia.length === 0}>
             <SelectTrigger className="h-8 bg-gray-100 dark:bg-gray-800">
-              <SelectValue placeholder={loading ? "Cargando..." : "Todas las fuentes"} />
+              <SelectValue placeholder={loading ? "Cargando..." : fuentesByTipologia.length === 0 ? "Sin fuentes disponibles" : "Todas las fuentes"} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas</SelectItem>
-              {filterOptions.fuente_datos.map((option) => (
+              {fuentesByTipologia.map((option) => (
                 <SelectItem key={option} value={option}>
                   {option}
                 </SelectItem>
@@ -176,13 +207,13 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
 
         <div>
           <Label htmlFor="categoria" className="text-xs text-muted-foreground mb-1 block">Categoría</Label>
-          <Select value={filters.categoria} onValueChange={(value) => updateFilter('categoria', value)} disabled={loading}>
+          <Select value={filters.categoria} onValueChange={(value) => updateFilter('categoria', value)} disabled={loading || categoriasByTipologia.length === 0}>
             <SelectTrigger className="h-8 bg-gray-100 dark:bg-gray-800">
-              <SelectValue placeholder={loading ? "Cargando..." : "Todas las categorías"} />
+              <SelectValue placeholder={loading ? "Cargando..." : categoriasByTipologia.length === 0 ? "Sin categorías disponibles" : "Todas las categorías"} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas</SelectItem>
-              {filterOptions.categoria.map((option) => (
+              {categoriasByTipologia.map((option) => (
                 <SelectItem key={option} value={option}>
                   {option}
                 </SelectItem>
@@ -191,42 +222,28 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
           </Select>
         </div>
 
-        <div className="pt-2 border-t border-border">
-          <Label className="text-xs text-muted-foreground mb-2 block">Filtros para Timeline</Label>
-
-          <div className="space-y-2">
-            <div>
-              <Label htmlFor="palanca" className="text-xs text-muted-foreground mb-1 block">Palanca</Label>
-              <Select value={filters.palanca} onValueChange={(value) => updateFilter('palanca', value)} disabled={loading}>
-                <SelectTrigger className="h-8 bg-gray-100 dark:bg-gray-800">
-                  <SelectValue placeholder={loading ? "Cargando..." : "Seleccionar palanca"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {filterOptions.palanca.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="kpi" className="text-xs text-muted-foreground mb-1 block">KPI</Label>
-              <Select value={filters.kpi} onValueChange={(value) => updateFilter('kpi', value)} disabled={loading}>
-                <SelectTrigger className="h-8 bg-gray-100 dark:bg-gray-800">
-                  <SelectValue placeholder={loading ? "Cargando..." : "Seleccionar KPI"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {filterOptions.kpi.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+        <div>
+          <Label htmlFor="palanca" className="text-xs text-muted-foreground mb-1 block">Palanca</Label>
+          <Select
+            value={filters.palanca || ''}
+            onValueChange={(value) => updateFilter('palanca', value)}
+            disabled={loading || palancasByTipologia.length === 0}
+          >
+            <SelectTrigger className="h-8 bg-gray-100 dark:bg-gray-800">
+              <SelectValue placeholder={
+                loading ? "Cargando..." :
+                palancasByTipologia.length === 0 ? "Sin palancas disponibles" :
+                "Seleccionar palanca"
+              } />
+            </SelectTrigger>
+            <SelectContent>
+              {palancasByTipologia.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
     </div>

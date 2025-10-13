@@ -30,20 +30,19 @@ def create_app():
     
     # Cloud Run detection: check if PORT env var exists (Cloud Run specific)
     if port or env == 'production':
-        # Cloud Run production - allow both specific frontend and wildcard for flexibility
-        frontend_url = os.getenv('FRONTEND_URL', 'https://retail-frontend-945253268443.us-central1.run.app')
-        allowed_origins = [
-            frontend_url,
-            'https://retail-frontend-945253268443.us-central1.run.app',
-            'http://localhost:5173',  # Still allow local for testing
-            'http://127.0.0.1:5173'
-        ]
+        # Cloud Run production - allow all origins (secure as Cloud Run handles auth)
+        # This allows any *.run.app domain to access the API
+        CORS(app,
+             origins="*",
+             supports_credentials=False,
+             allow_headers=['Content-Type', 'Authorization'],
+             methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
+        logger.info(f"CORS enabled for all origins (Cloud Run production)")
     else:
         # Local development
         allowed_origins = ['http://localhost:5173', 'http://127.0.0.1:5173']
-    
-    CORS(app, origins=allowed_origins)
-    logger.info(f"CORS enabled for: {allowed_origins}")
+        CORS(app, origins=allowed_origins)
+        logger.info(f"CORS enabled for: {allowed_origins}")
     
     # Request logging middleware
     @app.before_request

@@ -217,6 +217,69 @@ def get_filter_options():
             'error': f'Internal server error: {str(e)}'
         }), 500
 
+@analytics_bp.route('/api/dashboard/palancas-by-tipologia', methods=['GET'])
+def get_palancas_by_tipologia():
+    """Get palancas filtered by tipologia from store_master"""
+    try:
+        tipologia = request.args.get('tipologia')
+
+        if not tipologia:
+            return jsonify({
+                'success': False,
+                'error': 'Missing tipologia parameter'
+            }), 400
+
+        result = unified_db.get_palancas_by_tipologia(tipologia)
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Internal server error: {str(e)}'
+        }), 500
+
+@analytics_bp.route('/api/dashboard/fuentes-by-tipologia', methods=['GET'])
+def get_fuentes_by_tipologia():
+    """Get data sources filtered by tipologia from ab_test_result"""
+    try:
+        tipologia = request.args.get('tipologia')
+
+        if not tipologia:
+            return jsonify({
+                'success': False,
+                'error': 'Missing tipologia parameter'
+            }), 400
+
+        result = unified_db.get_fuentes_by_tipologia(tipologia)
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Internal server error: {str(e)}'
+        }), 500
+
+@analytics_bp.route('/api/dashboard/categorias-by-tipologia', methods=['GET'])
+def get_categorias_by_tipologia():
+    """Get categories filtered by tipologia from ab_test_result"""
+    try:
+        tipologia = request.args.get('tipologia')
+
+        if not tipologia:
+            return jsonify({
+                'success': False,
+                'error': 'Missing tipologia parameter'
+            }), 400
+
+        result = unified_db.get_categorias_by_tipologia(tipologia)
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Internal server error: {str(e)}'
+        }), 500
+
 @analytics_bp.route('/api/dashboard/results', methods=['GET'])
 def get_dashboard_results():
     """Get dashboard results data with multiple filters from PostgreSQL"""
@@ -262,13 +325,46 @@ def get_data_summary():
 
 @analytics_bp.route('/api/dashboard/evolution-data', methods=['GET'])
 def get_evolution_data():
-    """Get evolution data for timeline chart from PostgreSQL"""
+    """Get evolution data for timeline chart from PostgreSQL ab_test_result"""
     try:
-        palanca = request.args.get('palanca', 'Punta de góndola')  # Default palanca name
-        kpi = request.args.get('kpi', 'Cajas 8oz')  # Default kpi name
         tipologia = request.args.get('tipologia')
+        fuente = request.args.get('fuente')
+        unidad = request.args.get('unidad')
+        categoria = request.args.get('categoria')
+        palanca = request.args.get('palanca')
 
-        results = unified_db.get_evolution_data(palanca, kpi, tipologia)
+        # Call new method that queries ab_test_result with palanca vs control
+        results = unified_db.get_evolution_timeline_data(
+            tipologia=tipologia,
+            fuente=fuente,
+            unidad=unidad,
+            categoria=categoria,
+            palanca=palanca
+        )
+
+        return jsonify(results), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Internal server error: {str(e)}'
+        }), 500
+
+@analytics_bp.route('/api/dashboard/radar-data', methods=['GET'])
+def get_radar_data():
+    """Get aggregated data for radar chart visualization from PostgreSQL"""
+    try:
+        tipologia = request.args.get('tipologia')
+        fuente = request.args.get('fuente')
+        unidad = request.args.get('unidad')
+        categoria = request.args.get('categoria')
+
+        results = unified_db.get_radar_chart_data(
+            tipologia=tipologia,
+            fuente=fuente,
+            unidad=unidad,
+            categoria=categoria
+        )
 
         return jsonify(results), 200
 
