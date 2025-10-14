@@ -57,11 +57,8 @@ const PALANCAS = [
 ];
 
 export function SimulationPersonalizada() {
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState<number>(1);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
-  const [completedFeatures, setCompletedFeatures] = useState<string[]>([]);
-  const [activeFeature, setActiveFeature] = useState<string>('frentes');
-  const [showFinancial, setShowFinancial] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [calculationProgress, setCalculationProgress] = useState(0);
   const [calculationMessage, setCalculationMessage] = useState('');
@@ -101,7 +98,8 @@ export function SimulationPersonalizada() {
       case 1:
         return formData.tipologia !== '';
       case 2:
-        if (formData.tipoPalanca === '') return false;
+        return formData.tipoPalanca !== '';
+      case 2.5:
         if (formData.tipoPalanca === 'multiple') {
           return formData.palancasSeleccionadas.length >= 2;
         }
@@ -109,11 +107,7 @@ export function SimulationPersonalizada() {
       case 3:
         return formData.tamanoTienda !== '';
       case 4:
-        return true; // Siempre puede continuar desde features
-      case 5:
-        return results.uplift > 0;
-      case 6:
-        return formData.inversion > 0 && formData.maco > 0;
+        return true; // Step 4 simplificado - siempre puede simular
       default:
         return true;
     }
@@ -165,13 +159,21 @@ export function SimulationPersonalizada() {
   };
 
   const handleNext = () => {
-    if (currentStep === 4 && showFinancial && formData.inversion > 0 && formData.maco > 0) {
-      // Completar Step 4 y calcular
+    if (currentStep === 4) {
+      // Ejecutar cálculo al finalizar Step 4
       calculateResults();
     } else if (canContinue()) {
       // Marcar el paso actual como completado
       setCompletedSteps(prev => [...prev, currentStep]);
-      setCurrentStep(prev => Math.min(5, prev + 1));
+
+      // Lógica de progresión de steps
+      if (currentStep === 2) {
+        setCurrentStep(2.5); // Ir a selección de palancas
+      } else if (currentStep === 2.5) {
+        setCurrentStep(3); // Ir a tamaño de tienda
+      } else {
+        setCurrentStep(prev => prev + 1);
+      }
     }
   };
 
@@ -180,18 +182,23 @@ export function SimulationPersonalizada() {
       // Si ya calculó, volver a paso 4
       setCurrentStep(4);
     } else if (currentStep > 1) {
-      setCurrentStep(prev => prev - 1);
-      // Remover el paso anterior de completedSteps
-      setCompletedSteps(prev => prev.filter(s => s !== currentStep - 1));
+      // Lógica de retroceso de steps
+      if (currentStep === 3) {
+        setCurrentStep(2.5); // Volver a selección de palancas
+        setCompletedSteps(prev => prev.filter(s => s !== 2.5));
+      } else if (currentStep === 2.5) {
+        setCurrentStep(2); // Volver a tipo de palanca
+        setCompletedSteps(prev => prev.filter(s => s !== 2));
+      } else {
+        setCurrentStep(prev => prev - 1);
+        setCompletedSteps(prev => prev.filter(s => s !== currentStep - 1));
+      }
     }
   };
 
   const handleNewSimulation = () => {
     setCurrentStep(1);
     setCompletedSteps([]);
-    setCompletedFeatures([]);
-    setActiveFeature('frentes');
-    setShowFinancial(false);
     setIsCalculating(false);
     setFormData({
       tipologia: '',
@@ -214,31 +221,42 @@ export function SimulationPersonalizada() {
     setResults({ uplift: 0, roi: 0, payback: 0 });
   };
 
-  const completeFeature = (feature: string) => {
-    setCompletedFeatures(prev => [...prev, feature]);
-
-    // Determinar siguiente feature
-    const featureOrder = ['frentes', 'sku', 'equipos', 'puertas'];
-    const currentIndex = featureOrder.indexOf(feature);
-
-    if (currentIndex < featureOrder.length - 1) {
-      setActiveFeature(featureOrder[currentIndex + 1]);
-    } else {
-      // Todos los features completados, mostrar financial
-      setShowFinancial(true);
-    }
-  };
-
   // Helper para determinar clases de panel
+  // NOTA: Solo aplicamos scale y opacity, NO translate-x
+  // El translate-x se maneja a nivel del contenedor completo
   const getPanelClass = (step: number) => {
     if (completedSteps.includes(step)) {
-      return 'translate-x-[-120%] scale-75 opacity-60';
+      return 'scale-75 opacity-40'; // Panel completado: más pequeño y transparente
     } else if (step === currentStep) {
-      return 'translate-x-0 scale-100 opacity-100';
+      return 'scale-100 opacity-100'; // Panel activo: tamaño completo
     } else if (step > currentStep) {
-      return 'translate-x-[120%] scale-90 opacity-0';
+      return 'scale-90 opacity-0'; // Panel futuro: ligeramente pequeño e invisible
     }
     return '';
+  };
+
+  // Calcular desplazamiento para centrar el panel activo
+  // Con justify-center, Step 1 ya está centrado en offset 0
+  // Para steps posteriores, desplazamos a la izquierda sumando anchos + gaps
+  const getContainerOffset = () => {
+    const borderWidth = 4; // border-2 = 4px total (2px cada lado)
+    const cardWidth = 320 + borderWidth; // w-80 + border = 324px (Steps 1, 2, 3)
+    const cardWidthLarge = 384 + borderWidth; // w-96 + border = 388px (Step 2.5)
+    const gap = 32; // gap-8 = 32px
+
+    let offset = 0;
+
+    if (currentStep === 1) {
+      offset = 0; // Ya centrado por justify-center
+    } else if (currentStep === 2) {
+      offset = -(cardWidth + gap); // -356px
+    } else if (currentStep === 2.5) {
+      offset = -((cardWidth + gap) * 2); // -712px
+    } else if (currentStep === 3) {
+      offset = -((cardWidth + gap) * 2 + (cardWidthLarge + gap)); // -1132px
+    }
+
+    return offset;
   };
 
   const togglePalanca = (palanca: string) => {
@@ -264,9 +282,12 @@ export function SimulationPersonalizada() {
     <div className="h-full flex flex-col">
       {/* Content area */}
       <div className="flex-1 overflow-hidden p-6">
-        <div className="relative h-full flex items-center justify-center">
+        <div className="relative h-full flex items-center justify-center overflow-hidden">
           {/* Horizontal sliding panels for Steps 1-3 */}
-          <div className="flex items-center gap-8 transition-all duration-700 ease-in-out">
+          <div
+            className="flex items-center gap-8 transition-all duration-700 ease-in-out"
+            style={{ transform: `translateX(${getContainerOffset()}px)` }}
+          >
             {/* Paso 1: Tipología */}
             <div className={`flex-shrink-0 transition-all duration-700 ease-in-out ${getPanelClass(1)}`}>
               <Card className="border-2 border-primary/20 w-80">
@@ -334,9 +355,8 @@ export function SimulationPersonalizada() {
               </Card>
             </div>
 
-            {/* Paso 2b: Grid de Palancas */}
-            {formData.tipoPalanca && (
-              <div className={`flex-shrink-0 transition-all duration-700 ease-in-out ${getPanelClass(2)}`}>
+            {/* Paso 2.5: Grid de Palancas */}
+            <div className={`flex-shrink-0 transition-all duration-700 ease-in-out ${getPanelClass(2.5)} ${!formData.tipoPalanca ? 'opacity-0 pointer-events-none' : ''}`}>
                 <Card className="border-2 border-primary/20 w-96">
                   <CardHeader>
                     <CardTitle>
@@ -365,8 +385,7 @@ export function SimulationPersonalizada() {
                     </div>
                   </CardContent>
                 </Card>
-              </div>
-            )}
+            </div>
 
             {/* Paso 3: Tamaño de tienda */}
             <div className={`flex-shrink-0 transition-all duration-700 ease-in-out ${getPanelClass(3)}`}>
@@ -580,10 +599,12 @@ export function SimulationPersonalizada() {
                 </div>
               </CardContent>
             </Card>
-          )}
+          </div>
+        )}
 
           {/* Paso 5: Resultados completos */}
-          {currentStep === 5 && results.uplift > 0 && (
+        {currentStep === 5 && results.uplift > 0 && (
+          <div className="flex items-center justify-center h-full">
             <Card className="border-2 border-primary/20 w-full max-w-3xl">
               <CardHeader>
                 <CardTitle className="text-lg">Resultados de la Simulación</CardTitle>
@@ -691,8 +712,8 @@ export function SimulationPersonalizada() {
                 </div>
               </CardContent>
             </Card>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Navigation buttons */}
@@ -724,40 +745,24 @@ export function SimulationPersonalizada() {
       {isCalculating && (
         <div className="border-t border-border p-8 bg-card">
           <div className="flex flex-col items-center space-y-6 max-w-lg mx-auto">
-            {/* Animación sofisticada tipo "procesamiento de datos" */}
-            <div className="relative w-32 h-32">
-              {/* Círculo exterior girando lento */}
-              <div className="absolute inset-0 w-32 h-32 rounded-full border-4 border-primary/20 border-t-primary/60 animate-spin" style={{ animationDuration: '3s' }}></div>
+            {/* Animación minimalista - círculo único */}
+            <div className="relative w-24 h-24">
+              {/* Círculo giratorio simple */}
+              <div
+                className="absolute inset-0 w-24 h-24 rounded-full border-4 border-primary/20 border-t-primary animate-spin"
+                style={{ animationDuration: '1.2s' }}
+              ></div>
 
-              {/* Círculo medio girando medio */}
-              <div className="absolute inset-4 w-24 h-24 rounded-full border-4 border-primary/30 border-t-primary/70 animate-spin" style={{ animationDuration: '2s', animationDirection: 'reverse' }}></div>
-
-              {/* Círculo interior girando rápido */}
-              <div className="absolute inset-8 w-16 h-16 rounded-full border-4 border-primary/40 border-t-primary/80 animate-spin" style={{ animationDuration: '1.5s' }}></div>
-
-              {/* Centro pulsante */}
+              {/* Ícono central (sin pulse) */}
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-12 h-12 rounded-full bg-primary/20 animate-pulse">
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Sparkles className="w-6 h-6 text-primary" />
-                  </div>
-                </div>
+                <Sparkles className="w-8 h-8 text-primary" />
               </div>
-
-              {/* Puntos flotantes */}
-              <div className="absolute -top-2 left-1/2 w-2 h-2 bg-primary rounded-full animate-ping" style={{ animationDuration: '1s' }}></div>
-              <div className="absolute top-1/2 -right-2 w-2 h-2 bg-primary rounded-full animate-ping" style={{ animationDuration: '1.2s', animationDelay: '0.3s' }}></div>
-              <div className="absolute -bottom-2 left-1/2 w-2 h-2 bg-primary rounded-full animate-ping" style={{ animationDuration: '1.1s', animationDelay: '0.6s' }}></div>
-              <div className="absolute top-1/2 -left-2 w-2 h-2 bg-primary rounded-full animate-ping" style={{ animationDuration: '1.3s', animationDelay: '0.9s' }}></div>
             </div>
 
             {/* Texto dinámico */}
             <div className="text-center space-y-2">
               <p className="text-lg font-medium text-foreground">
                 {calculationMessage || 'Iniciando cálculo...'}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Procesando parámetros del modelo
               </p>
             </div>
 
