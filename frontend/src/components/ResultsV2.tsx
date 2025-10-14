@@ -1,36 +1,22 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Badge } from './ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
-import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import { 
-  Send, 
-  TrendingUp, 
-  ArrowLeft, 
-  Bot, 
-  User, 
-  CheckCircle, 
-  Database, 
-  Clock, 
+import {
+  Send,
+  Bot,
+  Database,
+  Clock,
   Zap,
-  AlertCircle,
   Sun,
   Moon,
   BarChart3,
   MessageSquare,
-  Brain,
-  Sparkles,
-  UserCircle,
-  Crown,
-  Star,
   UserCheck
 } from 'lucide-react';
 import { useChatContext } from '../contexts/ChatContext';
-import { apiService } from '../services/api';
 import { useTheme } from './ThemeProvider';
+import { SimulationVisualization } from './SimulationVisualization';
 import gatoradeLogo from '../assets/4de2379cad6c1c3cdddbd220d1ac6ce242ae078f.png';
 import gatoradeLogoDark from '../assets/0ebfb34dd11ac7b6cf64b19c7b02742c273e0b93.png';
 
@@ -45,12 +31,6 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  
-  // Estados para el gráfico dinámico
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [chartLoading, setChartLoading] = useState(true);
-  const [chartType, setChartType] = useState<'region' | 'city'>('region');
-  const [totalRevenue, setTotalRevenue] = useState(0);
 
   // Use chat context instead of direct hook
   const {
@@ -59,12 +39,10 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
     isTyping,
     sessionId,
     sendMessage,
-    analytics,
     suggestedQuestions,
     suggestedQuestionsCount,
     isInSuggestedMode,
-    sendSuggestedQuestion,
-    refreshSuggestedQuestions
+    sendSuggestedQuestion
   } = useChatContext();
 
   // Auto-scroll simplificado sin interferir con el foco
@@ -94,28 +72,6 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
     }
   }, [messages.length]);
 
-  // Cargar datos del gráfico
-  useEffect(() => {
-    const loadChartData = async () => {
-      try {
-        setChartLoading(true);
-        const response = chartType === 'region' 
-          ? await apiService.getRevenueByRegion()
-          : await apiService.getRevenueByCity();
-        
-        if (response.success) {
-          setChartData(response.data);
-          setTotalRevenue(response.total_revenue);
-        }
-      } catch (error) {
-        console.error('Error loading chart data:', error);
-      } finally {
-        setChartLoading(false);
-      }
-    };
-
-    loadChartData();
-  }, [chartType]);
 
   // Enfocar input solo después de carga inicial (una vez)
   useEffect(() => {
@@ -213,9 +169,9 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
 
   const handleSuggestedQuestion = async (question: string) => {
     if (isTyping) return;
-    
+
     await sendSuggestedQuestion(question);
-    
+
     // Enfocar después de enviar pregunta sugerida
     setTimeout(() => {
       if (inputRef.current) {
@@ -223,53 +179,6 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
       }
     }, 100);
   };
-
-
-  // Colores para el gráfico de torta
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
-
-  const detailedData = [
-    {
-      id: 1,
-      name: 'CTA Button Principal',
-      variants: [
-        { name: 'Control', visitors: 5420, conversions: 678, rate: 12.5, lift: 'baseline' },
-        { name: 'Naranja', visitors: 5380, conversions: 817, rate: 15.2, lift: '+21.6%' },
-        { name: 'Rojo', visitors: 5310, conversions: 993, rate: 18.7, lift: '+49.6%' }
-      ],
-      winner: 'Botón Rojo',
-      duration: '14 días',
-      status: 'Completado',
-      significance: 99,
-      revenue_impact: '+$142,500'
-    },
-    {
-      id: 2,
-      name: 'Landing Hero Banner',
-      variants: [
-        { name: 'Atleta', visitors: 3240, conversions: 421, rate: 13.0, lift: 'baseline' },
-        { name: 'Producto', visitors: 3180, conversions: 509, rate: 16.0, lift: '+23.1%' }
-      ],
-      winner: 'Imagen Producto',
-      duration: '12 días',
-      status: 'Completado',
-      significance: 95,
-      revenue_impact: '+$89,200'
-    },
-    {
-      id: 3,
-      name: 'Email Subject Line',
-      variants: [
-        { name: 'Control', visitors: 8920, conversions: 1248, rate: 14.0, lift: 'baseline' },
-        { name: 'Personalizado', visitors: 8850, conversions: 1983, rate: 22.4, lift: '+60.0%' }
-      ],
-      winner: 'Personalizado',
-      duration: '7 días',
-      status: 'Completado',
-      significance: 99,
-      revenue_impact: '+$230,800'
-    }
-  ];
 
   if (isLoading) {
     return (
@@ -334,191 +243,9 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
 
       {/* Main Content */}
       <main className="flex h-[calc(100vh-81px)]">
-        {/* Panel izquierdo - Resultados detallados */}
+        {/* Panel izquierdo - Simulaciones */}
         <div className="flex-1 p-6 overflow-y-auto">
-          <Tabs defaultValue="overview" className="h-full flex flex-col">
-            <TabsList className="grid w-full grid-cols-3 mb-4">
-              <TabsTrigger value="overview">Resumen Final</TabsTrigger>
-              <TabsTrigger value="details">Análisis Detallado</TabsTrigger>
-              <TabsTrigger value="insights">Impacto & ROI</TabsTrigger>
-            </TabsList>
-            
-            <div className="flex-1 overflow-hidden">
-              <TabsContent value="overview" className="h-full space-y-4 overflow-y-auto">
-                {detailedData.map((test) => (
-                  <Card key={test.id} className="bg-card border-l-4 border-l-accent">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-foreground">{test.name}</CardTitle>
-                        <div className="flex items-center space-x-2">
-                          <Badge className="bg-accent text-white">
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Completado
-                          </Badge>
-                          <Badge variant="outline">{test.significance}% confianza</Badge>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between text-sm text-muted-foreground">
-                        <span>{test.duration} • Ganador: {test.winner}</span>
-                        <span className="font-medium text-accent">{test.revenue_impact}</span>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {test.variants.map((variant, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/30">
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between mb-2">
-                                <h4 className="font-medium text-foreground">{variant.name}</h4>
-                                <div className="flex items-center space-x-3">
-                                  <span className={`text-lg font-semibold ${variant.rate === Math.max(...test.variants.map(v => v.rate)) ? 'text-accent' : 'text-foreground'}`}>
-                                    {variant.rate}%
-                                  </span>
-                                  {variant.rate === Math.max(...test.variants.map(v => v.rate)) && (
-                                    <TrendingUp className="w-4 h-4 text-accent" />
-                                  )}
-                                  <Badge variant={variant.lift === 'baseline' ? 'secondary' : 'default'} 
-                                         className={variant.lift !== 'baseline' ? 'bg-primary text-white' : ''}>
-                                    {variant.lift}
-                                  </Badge>
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-4 text-sm">
-                                <div>
-                                  <p className="text-muted-foreground">Visitantes</p>
-                                  <p className="font-medium">{variant.visitors.toLocaleString()}</p>
-                                </div>
-                                <div>
-                                  <p className="text-muted-foreground">Conversiones</p>
-                                  <p className="font-medium">{variant.conversions.toLocaleString()}</p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </TabsContent>
-
-              <TabsContent value="details" className="h-full overflow-y-auto">
-                <Card className="bg-card h-full">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-foreground">Revenue por {chartType === 'region' ? 'Región' : 'Ciudad'}</CardTitle>
-                      <div className="flex space-x-2">
-                        <Button
-                          variant={chartType === 'region' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => setChartType('region')}
-                        >
-                          Por Región
-                        </Button>
-                        <Button
-                          variant={chartType === 'city' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => setChartType('city')}
-                        >
-                          Por Ciudad
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="text-sm text-muted-foreground mt-2">
-                      Total Revenue: ${totalRevenue.toLocaleString()} • Datos en tiempo real
-                    </div>
-                  </CardHeader>
-                  <CardContent className="h-96">
-                    {chartLoading ? (
-                      <div className="flex items-center justify-center h-full">
-                        <div className="text-muted-foreground">Cargando datos...</div>
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={chartData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            label={({ name, percentage }) => `${name}: ${percentage}%`}
-                            outerRadius={120}
-                            fill="#8884d8"
-                            dataKey="value"
-                          >
-                            {chartData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            formatter={(value) => [`$${value.toLocaleString()}`, 'Revenue']}
-                            labelFormatter={(label) => `${label}`}
-                          />
-                          <Legend />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    )}
-                    
-                    {/* Estadísticas adicionales */}
-                    {!chartLoading && chartData.length > 0 && (
-                      <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4 text-sm">
-                        {chartData.map((item, index) => (
-                          <div key={item.name} className="p-3 border rounded-lg">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <div 
-                                className="w-3 h-3 rounded-full" 
-                                style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                              ></div>
-                              <span className="font-medium">{item.name}</span>
-                            </div>
-                            <div className="space-y-1 text-muted-foreground">
-                              <div>Revenue: ${item.value.toLocaleString()}</div>
-                              <div>Visitantes: {item.visitantes.toLocaleString()}</div>
-                              <div>Conversiones: {item.conversiones.toLocaleString()}</div>
-                              <div>Tasa conversión: {item.conversion_rate}%</div>
-                              <div>PDVs: {item.pdv_count}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="insights" className="h-full overflow-y-auto space-y-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card className="p-4 bg-accent/10 border-accent/30">
-                    <h4 className="font-medium text-accent mb-2">🏆 Experimentos Exitosos</h4>
-                    <p className="text-sm text-muted-foreground">3 de 3 tests completados con resultados positivos significativos. 100% de tasa de éxito.</p>
-                  </Card>
-
-                  <Card className="p-4 bg-primary/10 border-primary/30">
-                    <h4 className="font-medium text-primary mb-2">💰 Impacto Total</h4>
-                    <p className="text-sm text-muted-foreground">+$462,500 en revenue proyectado anual. ROI promedio del 340% sobre inversión.</p>
-                  </Card>
-
-                  <Card className="p-4 bg-secondary/10 border-secondary/30">
-                    <h4 className="font-medium text-foreground mb-2">📊 Mejor Performance</h4>
-                    <p className="text-sm text-muted-foreground">Email personalizado: +60% lift. Mayor oportunidad de escalamiento inmediato.</p>
-                  </Card>
-
-                  <Card className="p-4 bg-green-600/10 border-green-600/30">
-                    <h4 className="font-medium text-green-600 dark:text-green-400 mb-2">✅ Listos para Implementar</h4>
-                    <p className="text-sm text-muted-foreground">Todos los cambios validados estadísticamente. Implementación recomendada inmediata.</p>
-                  </Card>
-
-                  <Card className="lg:col-span-2 p-4 bg-orange-500/10 border-orange-500/30">
-                    <h4 className="font-medium text-orange-600 mb-2">🎯 Estrategia de Expansión</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Próximos pasos: 1) Implementar cambios ganadores, 2) Escalar a mercados similares, 
-                      3) Testear variaciones avanzadas, 4) Optimizar segmentación por demografía.
-                    </p>
-                  </Card>
-                </div>
-              </TabsContent>
-            </div>
-          </Tabs>
+          <SimulationVisualization />
         </div>
 
         {/* Panel derecho - Chatbot integrado */}

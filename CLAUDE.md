@@ -143,6 +143,11 @@ npm run lint
 - **TimelineChart.tsx**: Evolution chart with palanca vs control lines, starts from first positive value, shows project start marker with arrow
 - **SummaryCards.tsx**: Static summary cards (top-left sidebar)
 
+#### **Simulaciones Components:**
+- **SimulationVisualization.tsx**: Container with toggle between "Personalizada" and "Estudio" views
+- **SimulationPersonalizada.tsx**: Interactive 5-step simulation calculator
+- **SimulationEstudio.tsx**: Placeholder for future study simulations history
+
 #### **Table Structure (ExperimentTable):**
 - **Row Groups**: Combinations of `Source - Category` (e.g., "Sell In - Gatorade")
 - **Sub-rows**: By Unit (Cajas 8oz, Ventas)
@@ -182,6 +187,70 @@ npm run lint
 - **Control Line**: Gray (#muted-foreground) dashed line for easy comparison
 - **Required Filters**: Needs all 5 filters (tipología, fuente, unidad, categoría, palanca) to display
 - **Missing Filter Handling**: Shows friendly message indicating which filters are needed
+
+#### **Simulaciones Section:**
+The Analysis area now features a unified "Simulaciones" section replacing the previous 3-tab layout (Resumen Final, Análisis Detallado, Impacto & ROI).
+
+**Structure:**
+- **Toggle Views**: "Personalizada" (custom calculator) and "Estudio" (study history - coming soon)
+- **Centered Layout**: All steps centered with consistent spacing
+- **Single Scroll**: Only Step 4 (feature matrix) has internal scroll for configurations
+
+**SimulationPersonalizada - 5-Step Interactive Flow:**
+
+1. **Step 1 - Tipología Selection**:
+   - Radio buttons for Super e hiper, Conveniencia, Droguerías
+   - Mandatory selection to proceed
+
+2. **Step 2 - Palanca Configuration**:
+   - **Horizontal Grid Layout**: `grid-cols-[200px_1fr]`
+   - **Left Column (200px)**: Type selection - Simple (1 palanca) or Multiple (2+ palancas)
+   - **Right Column**: 2-column grid of palancas with checkboxes
+   - **Palancas Available**: Punta de góndola, Metro cuadrado, Isla, Cooler, Nevera vertical, Activación en tienda, Material POP
+   - **Validation**: Simple requires exactly 1 palanca, Multiple requires minimum 2
+
+3. **Step 3 - Store Size**:
+   - Radio buttons for Pequeño, Mediano, Grande
+   - **Smart Validation**:
+     - Pequeño disabled for Multiple palancas
+     - Grande disabled for Droguerías tipología
+
+4. **Step 4 - Feature Matrix + Financial Parameters**:
+   - **Feature Matrix** (scrollable section):
+     - Frentes de góndola (Propios/Competencia)
+     - SKUs disponibles (Propios/Competencia)
+     - Equipos de frío (Propios/Competencia)
+     - Puertas de refrigerador (Propias/Competencia)
+   - **Financial Parameters** (below matrix, separated with border):
+     - Inversión Total (COP)
+     - MACO (%)
+   - All fields with default values, fully editable
+
+5. **Step 5 - Results Display**:
+   - **Calculation Animation**:
+     - Multi-layer spinning circles (3 concentric rings at different speeds)
+     - 4 floating dots at cardinal directions with ping animation
+     - Dynamic messages: "Analizando features..." → "Ejecutando modelo OLS..." → "Calculando resultados..."
+     - Progress bar: 0% → 33% → 66% → 100%
+     - Total duration: ~2.5 seconds
+   - **Results Table Format**:
+     - Compact table with Métrica, Valor, Descripción columns
+     - **Uplift**: Percentage increase in sales (green, TrendingUp icon)
+     - **ROI**: Return on investment per $1 (primary color, DollarSign icon)
+     - **Payback**: Months to recover investment (orange, Calendar icon)
+   - **Summary Section**: Shows all configuration parameters (tipología, tamaño, palancas, inversión, MACO)
+   - **Action Buttons**: "Nueva Simulación" (reset) and "Guardar Simulación" (disabled/future)
+
+**Technical Details:**
+- **OLS Calculation**: Mock formula based on feature scores with competitive analysis
+- **Form Validation**: Step-by-step validation prevents progression until requirements met
+- **No Progress Indicators**: Clean UI without step numbers, percentages, or progress bars in navigation
+- **Navigation**: "Anterior"/"Continuar" buttons at bottom, "Simular" button at Step 4
+- **State Management**: All form data maintained in `formData` state object
+
+**SimulationEstudio:**
+- Placeholder component with "Coming Soon" message
+- Future feature: History of saved simulations and detailed study analysis
 
 ### Data Layer
 - **PostgreSQL Database**: Unified data source for both Dashboard and Chatbot
@@ -234,6 +303,7 @@ docker-compose -f deploy/docker-compose.prod.yml up -d
 - **Dark/Light Theme**: Complete theme system with session isolation
 - **Responsive Design**: Mobile-friendly interface with adaptive layouts
 - **AI-Powered Suggested Questions**: Contextual follow-up questions with OpenAI integration and intelligent flow management
+- **Interactive Simulaciones**: 5-step calculator for custom palanca simulations with OLS-based uplift, ROI, and payback calculations
 
 ### Dashboard Filter System
 
@@ -451,10 +521,18 @@ PORT=8080
 
 ## Cloud Run Deployment
 
+### Architecture
+**Self-Contained Backend with Embedded PostgreSQL:**
+- Backend container includes PostgreSQL server running on `localhost:5432`
+- Database initialized automatically on container startup with full UTF-8 encoding
+- 3.1 MB SQL dump with schema + 38,470+ rows loaded at startup
+- Ideal for static A/B testing data (no external Cloud SQL needed = $0 cost)
+- Container restarts reload data from dump (stateless design)
+
 ### Prerequisites:
 1. Install [Google Cloud SDK](https://cloud.google.com/sdk/docs/install)
 2. Authenticate: `gcloud auth login`
-3. Set your project: `gcloud config set project YOUR_PROJECT_ID`
+3. Set your project: `gcloud config set project DG-firstApp`
 4. Create `.env` file with `OPENAI_API_KEY` (see `.env.example`)
 
 ### Quick Deploy (Recommended):
@@ -503,6 +581,32 @@ export BACKEND_URL=$(gcloud run services describe retail-backend --region=us-cen
 - **`deployment-status.sh`** - Quick status check for deployed services
 - **`.gcloudignore`** - Files excluded from Cloud Build (in `backend/` and `frontend/`)
 
+### Updating Database for New Deployments:
+When you need to update the data in Cloud Run (e.g., after Excel changes):
+
+```bash
+# 1. Start local PostgreSQL with updated data
+docker-compose -f docker-compose.postgres.yml up -d
+
+# 2. Run migration if needed
+python backend/scripts/migrate_excel_to_postgres.py --truncate
+
+# 3. Generate new SQL dump
+docker exec gatorade_postgres pg_dump -U gatorade_user -d gatorade_ab_testing --clean --if-exists > backend/database/init_complete.sql
+
+# 4. Verify dump size
+ls -lh backend/database/init_complete.sql
+
+# 5. Deploy to Cloud Run (automatically picks up new dump)
+./deploy-backend-cloudrun.sh
+```
+
+### Key Files for Cloud Run:
+- **`backend/Dockerfile.cloudrun`** - Multi-stage Dockerfile with PostgreSQL
+- **`backend/docker-entrypoint.sh`** - Initialization script (PostgreSQL + Flask)
+- **`backend/database/init_complete.sql`** - Complete database dump (3.1 MB)
+- **`backend/.gcloudignore`** - Excludes unnecessary files from build
+
 ### Troubleshooting:
 ```bash
 # View logs
@@ -511,14 +615,65 @@ gcloud run logs tail retail-frontend --region=us-central1
 
 # Test endpoints
 curl https://retail-backend-xxx.run.app/api/health
+curl https://retail-backend-xxx.run.app/api/dashboard/data-summary
 curl https://retail-frontend-xxx.run.app
+
+# Check encoding issues
+gcloud run logs tail retail-backend --region=us-central1 | grep -i "utf\|ascii\|encoding"
 ```
 
 ---
 
-## Recent Updates (2025-10-12)
+## Recent Updates
 
-### Timeline Chart Enhancements
+### 2025-10-13: Interactive Simulaciones Section
+**New Feature - Custom Palanca Calculator:**
+- **Replaced 3-Tab Layout**: Unified "Simulaciones" section replaces Resumen Final, Análisis Detallado, and Impacto & ROI
+- **Dual View System**: Toggle between "Personalizada" (calculator) and "Estudio" (coming soon)
+- **5-Step Interactive Flow**:
+  1. Tipología selection (Super e hiper, Conveniencia, Droguerías)
+  2. Palanca configuration (Simple/Multiple with 7 palanca options)
+  3. Store size selection (Pequeño, Mediano, Grande with smart validation)
+  4. Feature matrix + Financial parameters (Frentes, SKUs, Equipos, Puertas, Inversión, MACO)
+  5. Results display (Uplift, ROI, Payback in compact table format)
+- **Sophisticated Animation**: Multi-layer spinning circles with progress bar and dynamic messages during OLS calculation
+- **Smart Validation**: Context-aware rules (e.g., Pequeño disabled for Multiple palancas, Grande disabled for Droguerías)
+- **Compact Results**: Professional table format instead of large cards, includes configuration summary
+
+**Technical Implementation:**
+- `frontend/src/components/SimulationVisualization.tsx`: Container with toggle
+- `frontend/src/components/SimulationPersonalizada.tsx`: 5-step calculator with state management and validation
+- `frontend/src/components/SimulationEstudio.tsx`: Placeholder for future study history
+- Mock OLS calculation based on feature scores and competitive analysis
+- Horizontal grid layout for optimal space utilization (Step 2)
+- Single scroll point only in Step 4's feature matrix section
+
+### 2025-10-13: Embedded PostgreSQL for Cloud Run
+**Major Infrastructure Change:**
+- **Self-Contained Backend**: PostgreSQL now runs inside the same Cloud Run container as Flask
+- **Zero External Dependencies**: No Cloud SQL needed ($0/month cost savings)
+- **UTF-8 Configuration**: Full UTF-8 encoding support (C.UTF-8 locale) for Spanish characters
+- **Automatic Initialization**: Database created and populated on container startup
+- **Performance**: 3.1 MB SQL dump loads in ~5 seconds during container initialization
+
+**Technical Details:**
+- `backend/Dockerfile.cloudrun`: Modified to include PostgreSQL 17 + initialization
+- `backend/docker-entrypoint.sh`: Custom entrypoint script that:
+  - Initializes PostgreSQL with UTF-8 encoding (`--encoding=UTF8 --locale=C.UTF-8`)
+  - Creates database with UTF-8 collation
+  - Loads complete SQL dump (schema + 38,470+ rows)
+  - Starts Flask with Gunicorn
+- `backend/database/init_complete.sql`: Complete database dump (auto-generated from local PostgreSQL)
+
+**Benefits:**
+- ✅ Simplified deployment (single container)
+- ✅ No external database costs
+- ✅ Perfect for static/read-only data
+- ✅ Fast cold starts (~40 seconds including DB initialization)
+- ✅ Automatic data reload on container restart
+
+### 2025-10-12: Timeline Chart & Filter Enhancements
+**Timeline Chart:**
 - **Smart Start Point**: Chart now begins from first positive palanca value
 - **Project Start Marker**: Visual arrow indicator showing "Fecha inicio de Palanca"
   - Calculated using mode of store start dates from `store_master`
@@ -526,7 +681,7 @@ curl https://retail-frontend-xxx.run.app
 - **Date Display**: X-axis shows DD/MM format dates instead of period labels
 - **Color Consistency**: Palanca line color matches tipología across all visualizations
 
-### Dynamic Filter System
+**Dynamic Filter System:**
 - **KPI Filter Removed**: Simplified to 5 core filters (tipología, palanca, fuente, unidad, categoría)
 - **Tipología-Dependent Filtering**: Palanca, fuente, and categoría now filter dynamically based on selected tipología
   - New backend methods: `get_palancas_by_tipologia()`, `get_fuentes_by_tipologia()`, `get_categorias_by_tipologia()`
@@ -537,7 +692,7 @@ curl https://retail-frontend-xxx.run.app
   - Tipologías: Super e hiper → Conveniencia → Droguerías
   - Categorías: Gatorade → Gatorade 500ml → Gatorade 1000ml → Gatorade Sugar-free → Electrolit → Powerade → Otros
 
-### Technical Improvements
+**Technical Improvements:**
 - **Backend**: Added three new service methods for tipología-based filtering
 - **API**: Three new GET endpoints for dynamic filter options
 - **Frontend**: Enhanced FilterPanel with smart state management and auto-refresh on tipología change

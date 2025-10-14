@@ -17,8 +17,8 @@ if [ ! -d "$PGDATA" ]; then
     chown -R postgres:postgres "$PGDATA"
     chmod 700 "$PGDATA"
 
-    # Initialize database cluster as postgres user
-    su - postgres -c "/usr/lib/postgresql/*/bin/initdb -D $PGDATA"
+    # Initialize database cluster as postgres user with UTF-8 encoding
+    su - postgres -c "/usr/lib/postgresql/*/bin/initdb -D $PGDATA --encoding=UTF8 --locale=C.UTF-8"
 
     echo "✅ PostgreSQL data directory initialized"
 fi
@@ -37,6 +37,11 @@ listen_addresses = 'localhost'
 port = 5432
 max_connections = 100
 shared_buffers = 128MB
+client_encoding = utf8
+lc_messages = 'C.UTF-8'
+lc_monetary = 'C.UTF-8'
+lc_numeric = 'C.UTF-8'
+lc_time = 'C.UTF-8'
 EOF
 
 # Start PostgreSQL in background
@@ -73,8 +78,8 @@ su - postgres -c "psql -h localhost -U postgres" <<-EOSQL
     END
     \$\$;
 
-    -- Create database if not exists
-    SELECT 'CREATE DATABASE $POSTGRES_DB OWNER $POSTGRES_USER'
+    -- Create database if not exists with UTF-8 encoding
+    SELECT 'CREATE DATABASE $POSTGRES_DB OWNER $POSTGRES_USER ENCODING ''UTF8'' LC_COLLATE ''C.UTF-8'' LC_CTYPE ''C.UTF-8'''
     WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$POSTGRES_DB')\gexec
 
     -- Grant privileges
@@ -86,21 +91,15 @@ echo "✅ Database and user created"
 # Load SQL dump
 if [ -f "$DUMP_FILE" ]; then
     echo "📊 Loading database dump..."
-    su - postgres -c "psql -h localhost -U $POSTGRES_USER -d $POSTGRES_DB -f $DUMP_FILE" > /tmp/load.log 2>&1
+    su - postgres -c "PGCLIENTENCODING=UTF8 psql -h localhost -U $POSTGRES_USER -d $POSTGRES_DB -f $DUMP_FILE" > /tmp/load.log 2>&1
 
     if [ $? -eq 0 ]; then
         echo "✅ Database dump loaded successfully"
 
-        # Show row counts
-        echo "📈 Database statistics:"
-        su - postgres -c "psql -h localhost -U $POSTGRES_USER -d $POSTGRES_DB -c \"
-            SELECT
-                schemaname,
-                tablename,
-                n_live_tup as rows
-            FROM pg_stat_user_tables
-            ORDER BY n_live_tup DESC;
-        \""
+        # Show row counts (simple query)
+        echo "📈 Counting tables..."
+        TABLE_COUNT=$(su - postgres -c "psql -h localhost -U $POSTGRES_USER -d $POSTGRES_DB -t -c \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';\"" 2>/dev/null || echo "0")
+        echo "  Tables created: $(echo $TABLE_COUNT | xargs)"
     else
         echo "⚠️  Warning: Database dump load had issues. Check /tmp/load.log"
         tail -20 /tmp/load.log
