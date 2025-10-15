@@ -31,6 +31,7 @@ CREATE TABLE typology_master (
 CREATE TABLE lever_master (
     lever_id SERIAL PRIMARY KEY,
     lever_name VARCHAR(100) NOT NULL UNIQUE,
+    lever_name_clean VARCHAR(100),  -- Cleaned name for API/code usage
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -127,6 +128,120 @@ CREATE TABLE ab_test_summary (
 );
 
 -- ============================================================================
+-- SIMULATION TABLES (ML Model Results)
+-- ============================================================================
+
+-- CAPEX & Fee Master (Costos por tipología y palanca)
+CREATE TABLE capex_fee (
+    id SERIAL PRIMARY KEY,
+    typology_id INTEGER NOT NULL REFERENCES typology_master(typology_id),
+    lever_id INTEGER NOT NULL REFERENCES lever_master(lever_id),
+    capex DECIMAL(15, 6) NOT NULL,  -- CAPEX cost
+    fee DECIMAL(15, 6) NOT NULL,    -- Fee cost
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_capex_fee UNIQUE (typology_id, lever_id)
+);
+
+-- Simulation Summary (Resúmenes estadísticos por combinación de palancas)
+CREATE TABLE simulation_summary (
+    id SERIAL PRIMARY KEY,
+    "tipo_combinación" VARCHAR(50) NOT NULL,  -- 'simple' or 'combinación'
+    typology_id INTEGER NOT NULL REFERENCES typology_master(typology_id),
+    unit_id INTEGER NOT NULL REFERENCES measurement_unit_master(unit_id),
+
+    -- Statistical measures
+    media DECIMAL(10, 6),           -- Mean uplift
+    mediana DECIMAL(10, 6),         -- Median uplift
+    p25 DECIMAL(10, 6),             -- 25th percentile
+    p75 DECIMAL(10, 6),             -- 75th percentile
+
+    -- Palancas (binary flags: 0 or 1)
+    exhibicion_adicional_mamut SMALLINT DEFAULT 0,
+    nevera_en_punto_de_pago SMALLINT DEFAULT 0,
+    entrepano_con_comunicacion SMALLINT DEFAULT 0,
+    cajero_vendedor SMALLINT DEFAULT 0,
+    tienda_multipalanca SMALLINT DEFAULT 0,
+    punta_de_gondola SMALLINT DEFAULT 0,
+    mini_vallas_en_fachada SMALLINT DEFAULT 0,
+    metro_cuadrado SMALLINT DEFAULT 0,
+    rompe_trafico_cross_category SMALLINT DEFAULT 0,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_palanca_values CHECK (
+        exhibicion_adicional_mamut IN (0, 1) AND
+        nevera_en_punto_de_pago IN (0, 1) AND
+        entrepano_con_comunicacion IN (0, 1) AND
+        cajero_vendedor IN (0, 1) AND
+        tienda_multipalanca IN (0, 1) AND
+        punta_de_gondola IN (0, 1) AND
+        mini_vallas_en_fachada IN (0, 1) AND
+        metro_cuadrado IN (0, 1) AND
+        rompe_trafico_cross_category IN (0, 1)
+    )
+);
+
+-- Simulation Results (Resultados completos de simulaciones OLS - 1M+ rows)
+CREATE TABLE simulation_result (
+    id SERIAL PRIMARY KEY,
+    typology_id INTEGER NOT NULL REFERENCES typology_master(typology_id),
+    unit_id INTEGER NOT NULL REFERENCES measurement_unit_master(unit_id),
+
+    -- Initial conditions
+    vol_inicial INTEGER NOT NULL,  -- Initial volume
+
+    -- Execution checks (binary: 0 or 1)
+    "planograma_ejecución_check" SMALLINT DEFAULT 0,
+    precios_check SMALLINT DEFAULT 0,
+    carga_check SMALLINT DEFAULT 0,
+
+    -- Feature counts (own vs competition)
+    q_frentes INTEGER DEFAULT 0,               -- Shelf facings (own)
+    q_frentes_competencia INTEGER DEFAULT 0,   -- Shelf facings (competition)
+    q_sku INTEGER DEFAULT 0,                   -- SKU count (own)
+    q_sku_competencia INTEGER DEFAULT 0,       -- SKU count (competition)
+    q_edf_ad DECIMAL(10, 2) DEFAULT 0,         -- Additional cooling equipment (own)
+    q_edf_ad_competencia DECIMAL(10, 2) DEFAULT 0,  -- Additional cooling equipment (competition)
+    q_cof_puertas INTEGER DEFAULT 0,           -- Cooler doors (own)
+    q_cof_puertas_competencia INTEGER DEFAULT 0,    -- Cooler doors (competition)
+
+    -- OLS Model predictions
+    prediction DECIMAL(15, 6),          -- Predicted value with palanca
+    control_prediction DECIMAL(15, 6),  -- Predicted value for control
+    uplift DECIMAL(10, 6),              -- Uplift percentage (difference)
+
+    -- Palancas (binary flags: 0 or 1)
+    exhibicion_adicional_mamut SMALLINT DEFAULT 0,
+    nevera_en_punto_de_pago SMALLINT DEFAULT 0,
+    entrepano_con_comunicacion SMALLINT DEFAULT 0,
+    cajero_vendedor SMALLINT DEFAULT 0,
+    tienda_multipalanca SMALLINT DEFAULT 0,
+    punta_de_gondola SMALLINT DEFAULT 0,
+    mini_vallas_en_fachada SMALLINT DEFAULT 0,
+    metro_cuadrado SMALLINT DEFAULT 0,
+    rompe_trafico_cross_category SMALLINT DEFAULT 0,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_sim_palanca_values CHECK (
+        "planograma_ejecución_check" IN (0, 1) AND
+        precios_check IN (0, 1) AND
+        carga_check IN (0, 1) AND
+        exhibicion_adicional_mamut IN (0, 1) AND
+        nevera_en_punto_de_pago IN (0, 1) AND
+        entrepano_con_comunicacion IN (0, 1) AND
+        cajero_vendedor IN (0, 1) AND
+        tienda_multipalanca IN (0, 1) AND
+        punta_de_gondola IN (0, 1) AND
+        mini_vallas_en_fachada IN (0, 1) AND
+        metro_cuadrado IN (0, 1) AND
+        rompe_trafico_cross_category IN (0, 1)
+    )
+);
+
+-- ============================================================================
 -- INDEXES FOR PERFORMANCE
 -- ============================================================================
 
@@ -152,6 +267,22 @@ CREATE INDEX idx_store_active ON store_master(is_active) WHERE is_active = TRUE;
 -- Indexes on period_master
 CREATE INDEX idx_period_dates ON period_master(start_date, end_date);
 CREATE INDEX idx_period_type ON period_master(period_type);
+
+-- Indexes on capex_fee
+CREATE INDEX idx_capex_fee_typology ON capex_fee(typology_id);
+CREATE INDEX idx_capex_fee_lever ON capex_fee(lever_id);
+
+-- Indexes on simulation_summary
+CREATE INDEX idx_simulation_summary_typology ON simulation_summary(typology_id);
+CREATE INDEX idx_simulation_summary_unit ON simulation_summary(unit_id);
+CREATE INDEX idx_simulation_summary_tipo ON simulation_summary("tipo_combinación");
+
+-- Indexes on simulation_result (critical for 1M+ rows)
+CREATE INDEX idx_simulation_result_typology ON simulation_result(typology_id);
+CREATE INDEX idx_simulation_result_unit ON simulation_result(unit_id);
+CREATE INDEX idx_simulation_result_vol ON simulation_result(vol_inicial);
+CREATE INDEX idx_simulation_result_uplift ON simulation_result(uplift);
+CREATE INDEX idx_simulation_result_composite ON simulation_result(typology_id, unit_id, vol_inicial);
 
 -- ============================================================================
 -- VIEWS FOR CHATBOT (Simplified queries for text-to-SQL)
@@ -250,6 +381,8 @@ CREATE TRIGGER update_period_master_updated_at BEFORE UPDATE ON period_master FO
 CREATE TRIGGER update_store_master_updated_at BEFORE UPDATE ON store_master FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_ab_test_result_updated_at BEFORE UPDATE ON ab_test_result FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_ab_test_summary_updated_at BEFORE UPDATE ON ab_test_summary FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_capex_fee_updated_at BEFORE UPDATE ON capex_fee FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_simulation_summary_updated_at BEFORE UPDATE ON simulation_summary FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
 -- COMMENTS (Documentation)
@@ -265,6 +398,9 @@ COMMENT ON TABLE period_master IS 'Maestro de períodos temporales';
 COMMENT ON TABLE store_master IS 'Maestro de tiendas (PDVs) con códigos sell-in/sell-out';
 COMMENT ON TABLE ab_test_result IS 'Resultados detallados de pruebas A/B por tienda y período';
 COMMENT ON TABLE ab_test_summary IS 'Resúmenes agregados de pruebas A/B por tipología y palanca';
+COMMENT ON TABLE capex_fee IS 'Costos CAPEX y Fee por tipología y palanca para cálculos de ROI';
+COMMENT ON TABLE simulation_summary IS 'Resúmenes estadísticos de simulaciones OLS por combinación de palancas';
+COMMENT ON TABLE simulation_result IS 'Resultados completos de simulaciones del modelo OLS (1M+ rows) con uplifts predichos';
 
 COMMENT ON VIEW v_chatbot_complete IS 'Vista completa para consultas del chatbot con todos los joins resueltos';
 COMMENT ON VIEW v_dashboard_summary IS 'Vista de resúmenes para el dashboard';

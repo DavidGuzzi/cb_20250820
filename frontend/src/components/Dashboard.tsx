@@ -8,7 +8,8 @@ import { ResultsVisualization } from './ResultsVisualization';
 import { TimelineChart } from './TimelineChart';
 import gatoradeLogo from '../assets/4de2379cad6c1c3cdddbd220d1ac6ce242ae078f.png';
 import gatoradeLogoDark from '../assets/0ebfb34dd11ac7b6cf64b19c7b02742c273e0b93.png';
-import poweredByImage from '../assets/8388e6abe7aa42dbcd9db7058b9d67171b1d8c24.png';
+import poweredByImageLight from '../assets/8388e6abe7aa42dbcd9db7058b9d67171b1d8c24b.png';
+import poweredByImageDark from '../assets/8388e6abe7aa42dbcd9db7058b9d67171b1d8c24.png';
 
 interface DashboardProps {
   userEmail: string;
@@ -93,15 +94,15 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
           <div className="mt-4 pt-4 border-t border-border">
             <div className="flex flex-col items-center space-y-2 mb-4">
               <span className="text-sm text-muted-foreground font-medium">Powered by</span>
-              <a 
-                href="https://marketone.co/" 
-                target="_blank" 
+              <a
+                href="https://marketone.co/"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="inline-block"
               >
-                <img 
-                  src={poweredByImage} 
-                  alt="Powered by" 
+                <img
+                  src={theme === 'dark' ? poweredByImageDark : poweredByImageLight}
+                  alt="Powered by"
                   className="h-10 opacity-90 hover:opacity-100 transition-all duration-300 hover:scale-105 cursor-pointer"
                 />
               </a>
