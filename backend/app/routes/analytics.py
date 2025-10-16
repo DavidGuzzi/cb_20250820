@@ -304,6 +304,28 @@ def get_dashboard_results():
             'error': f'Internal server error: {str(e)}'
         }), 500
 
+@analytics_bp.route('/api/dashboard/competition-results', methods=['GET'])
+def get_competition_results():
+    """Get competition results (Electrolit, Powerade, Otros) with filters from PostgreSQL"""
+    try:
+        tipologia = request.args.get('tipologia')
+        fuente = request.args.get('fuente')
+        unidad = request.args.get('unidad')
+
+        results = unified_db.get_competition_results(
+            tipologia=tipologia,
+            fuente=fuente,
+            unidad=unidad
+        )
+
+        return jsonify(results), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Internal server error: {str(e)}'
+        }), 500
+
 @analytics_bp.route('/api/dashboard/data-summary', methods=['GET'])
 def get_data_summary():
     """Get summary of available PostgreSQL data"""
@@ -340,6 +362,32 @@ def get_evolution_data():
             unidad=unidad,
             categoria=categoria,
             palanca=palanca
+        )
+
+        return jsonify(results), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Internal server error: {str(e)}'
+        }), 500
+
+@analytics_bp.route('/api/dashboard/pdv-summary', methods=['GET'])
+def get_pdv_summary():
+    """Get PDV summary (Control vs Foco) by tipologia and palanca"""
+    try:
+        tipologia = request.args.get('tipologia')
+        palanca = request.args.get('palanca')
+
+        if not tipologia:
+            return jsonify({
+                'success': False,
+                'error': 'Missing tipologia parameter'
+            }), 400
+
+        results = unified_db.get_pdv_summary(
+            tipologia=tipologia,
+            palanca=palanca if palanca else None
         )
 
         return jsonify(results), 200

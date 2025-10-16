@@ -122,3 +122,6 @@ app_db_20251008_2014.xlsx
 app_db_20251015_1757.xlsx
 df_ab_test_simulations.parquet
 backend/database/init_complete.sql
+backend/app_db_20251015_1926.xlsx
+app_db_20251015_1926.xlsx
+backend/database/init_complete.sql

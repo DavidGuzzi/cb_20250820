@@ -1,10 +1,6 @@
 // API service for communicating with the Flask backend
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-// Debug log to verify API URL
-console.log('🔗 API_BASE_URL:', API_BASE_URL);
-console.log('🔗 VITE_API_URL env:', import.meta.env.VITE_API_URL);
-
 export interface ChatMessage {
   id: string;
   text: string;
@@ -294,6 +290,40 @@ class ApiService {
 
     const queryString = params.toString();
     return this.fetchApi(`/api/dashboard/results${queryString ? '?' + queryString : ''}`);
+  }
+
+  // Get competition results data (Electrolit, Powerade, Otros)
+  async getCompetitionResults(
+    tipologia?: string,
+    fuente?: string,
+    unidad?: string
+  ): Promise<{
+    success: boolean;
+    data: Array<{
+      source: string;
+      category: string;
+      unit: string;
+      palanca: string;
+      variacion_promedio: number;
+      diferencia_vs_control: number;
+    }>;
+    palancas: string[];
+    sources: string[];
+    categories: string[];
+    units: string[];
+    filtered_by: {
+      tipologia: string | null;
+      fuente: string | null;
+      unidad: string | null;
+    };
+  }> {
+    const params = new URLSearchParams();
+    if (tipologia) params.append('tipologia', tipologia);
+    if (fuente) params.append('fuente', fuente);
+    if (unidad) params.append('unidad', unidad);
+
+    const queryString = params.toString();
+    return this.fetchApi(`/api/dashboard/competition-results${queryString ? '?' + queryString : ''}`);
   }
 
   // Get dashboard data summary

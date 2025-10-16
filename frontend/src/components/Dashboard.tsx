@@ -34,10 +34,10 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="flex items-center gap-3">
-              <img 
-                src={theme === 'dark' ? gatoradeLogoDark : gatoradeLogo} 
-                alt="Gatorade Logo" 
-                className="w-10 h-10 object-contain"
+              <img
+                src={theme === 'dark' ? gatoradeLogoDark : gatoradeLogo}
+                alt="Gatorade Logo"
+                className="w-14 h-14 object-contain"
               />
               <h1 className="text-xl font-bold text-foreground">
                 Gatorade A/B Testing
@@ -80,20 +80,24 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
       {/* Main Content */}
       <main className="flex h-[calc(100vh-81px)]">
         {/* Left Sidebar */}
-        <div className="w-72 border-r bg-card p-4 flex flex-col h-full">
-          <div className="mb-8">
-            <h2 className="mb-3 text-foreground font-bold text-lg">Resumen General</h2>
-            <SummaryCards />
-          </div>
-          
-          <div className="flex-1">
-            <FilterPanel filters={filters} onFiltersChange={setFilters} />
+        <div className="w-80 border-r bg-card flex flex-col h-full overflow-hidden">
+          {/* Scrollable content area */}
+          <div className="flex-1 overflow-y-auto px-4 pt-4">
+            <div className="mb-3">
+              <h2 className="mb-1.5 text-foreground font-bold text-sm">Resumen de la ejecución</h2>
+              <SummaryCards tipologia={filters.tipologia} palanca={filters.palanca} />
+            </div>
+
+            <div>
+              <FilterPanel filters={filters} onFiltersChange={setFilters} />
+            </div>
           </div>
 
-          {/* Powered by section */}
-          <div className="mt-4 pt-4 border-t border-border">
-            <div className="flex flex-col items-center space-y-2 mb-4">
-              <span className="text-sm text-muted-foreground font-medium">Powered by</span>
+          {/* Fixed footer section */}
+          <div className="flex-shrink-0 border-t border-border px-4 py-4">
+            {/* Powered by section */}
+            <div className="flex flex-col items-center space-y-2 mb-3">
+              <span className="text-xs text-muted-foreground font-medium">Powered by</span>
               <a
                 href="https://marketone.co/"
                 target="_blank"
@@ -103,20 +107,18 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
                 <img
                   src={theme === 'dark' ? poweredByImageDark : poweredByImageLight}
                   alt="Powered by"
-                  className="h-10 opacity-90 hover:opacity-100 transition-all duration-300 hover:scale-105 cursor-pointer"
+                  className="h-9 opacity-90 hover:opacity-100 transition-all duration-300 hover:scale-105 cursor-pointer"
                 />
               </a>
             </div>
-          </div>
 
-          {/* Botón Salir abajo a la izquierda */}
-          <div className="pt-2 border-t border-border">
-            <Button 
+            {/* Botón Salir */}
+            <Button
               variant="outline"
               onClick={onLogout}
-              className="w-full text-muted-foreground hover:text-foreground"
+              className="w-full text-muted-foreground hover:text-foreground text-xs py-1.5"
             >
-              <LogOut className="w-4 h-4 mr-2" />
+              <LogOut className="w-3 h-3 mr-1.5" />
               Salir
             </Button>
           </div>
@@ -126,12 +128,13 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
         <div className="flex-1 flex flex-col p-6 gap-4 bg-background">
           {/* Results Section (Table/Radar) - Takes 55% of height */}
           <div className="flex-[1.1] min-h-0">
+            <h2 className="mb-2 text-foreground font-bold text-xl">Resumen de resultados descriptivos</h2>
             <ResultsVisualization filters={filters} />
           </div>
 
           {/* Chart Section - Takes 45% of height */}
-          <div className="flex-[0.9] min-h-0">
-            <h2 className="mb-2 text-foreground font-bold text-xl">Evolución Temporal</h2>
+          <div className="flex-[0.9] min-h-0 mt-12">
+            <h2 className="mb-2 text-foreground font-bold text-xl">Evolución temporal</h2>
             <div className="h-[calc(100%-2rem)] max-h-80">
               <TimelineChart filters={filters} />
             </div>

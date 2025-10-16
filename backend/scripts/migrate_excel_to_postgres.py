@@ -40,7 +40,7 @@ DB_CONFIG = {
 }
 
 # File paths
-EXCEL_FILE = 'app_db_20251015_1757.xlsx'
+EXCEL_FILE = 'app_db_20251015_1926.xlsx'
 PARQUET_FILE = 'df_ab_test_simulations.parquet'
 
 # Sheet to table mapping (Excel)
@@ -53,6 +53,7 @@ SHEET_TO_TABLE = {
     'data_source_master': 'data_source_master',
     'period_master': 'period_master',
     'store_master': 'store_master',
+    'audit_master': 'audit_master',
     'df_ab_test_final': 'ab_test_result',
     'df_ab_test_summary_final': 'ab_test_summary',
     'capex_fee': 'capex_fee',
@@ -186,6 +187,7 @@ class ExcelToPostgresMigrator:
             'data_source_master',
             'period_master',
             'store_master',
+            'audit_master',
             'df_ab_test_final',
             'df_ab_test_summary_final',
             'capex_fee',

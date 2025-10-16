@@ -1,22 +1,21 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
-import { TrendingUp, TrendingDown, Target, Zap, Star, Settings, Users, ShoppingCart, TrendingDown as Triangle, Award, Compass, Gift, MapPin, Palette, Rocket } from 'lucide-react';
-import { useState, useEffect, Fragment } from 'react';
+import { Target, Zap, Star, Settings, ShoppingCart, Award, Compass, Gift, MapPin, Palette, Rocket } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 
-interface ExperimentTableProps {
+interface CompetitionTableProps {
   filters: {
     tipologia: string;
     palanca: string;
-    kpi: string;
     fuente: string;
     unidad: string;
     categoria: string;
   };
 }
 
-// Component for displaying cell values: difference_vs_control in color + average_variation in parentheses
+// Component for displaying cell values
 const CellValue = ({
   variacion_promedio,
   diferencia_vs_control
@@ -36,54 +35,43 @@ const CellValue = ({
   </div>
 );
 
-export function ExperimentTable({ filters }: ExperimentTableProps) {
+export function CompetitionTable({ filters }: CompetitionTableProps) {
   const [resultsData, setResultsData] = useState<any[]>([]);
   const [palancas, setPalancas] = useState<string[]>([]);
-  const [sources, setSources] = useState<string[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [units, setUnits] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadResultsData = async () => {
+    const loadCompetitionData = async () => {
       try {
         setLoading(true);
         setError(null);
 
         // Convert 'all' to undefined for API call
-        const response = await apiService.getDashboardResults(
+        const response = await apiService.getCompetitionResults(
           filters.tipologia,
           filters.fuente === 'all' ? undefined : filters.fuente,
-          filters.unidad === 'all' ? undefined : filters.unidad,
-          filters.categoria === 'all' ? undefined : filters.categoria
+          filters.unidad === 'all' ? undefined : filters.unidad
         );
 
         if (response.success) {
           setResultsData(response.data);
           setPalancas(response.palancas);
-          setSources(response.sources);
-          setCategories(response.categories);
-          setUnits(response.units);
         } else {
-          setError('Error loading results data');
+          setError('Error loading competition data');
         }
       } catch (err) {
-        console.error('Error loading results:', err);
+        console.error('Error loading competition:', err);
         setError('Error connecting to server');
-        // Fallback to empty data
         setResultsData([]);
         setPalancas([]);
-        setSources([]);
-        setCategories([]);
-        setUnits([]);
       } finally {
         setLoading(false);
       }
     };
 
-    loadResultsData();
-  }, [filters.tipologia, filters.fuente, filters.unidad, filters.categoria]); // Reload when filters change
+    loadCompetitionData();
+  }, [filters.tipologia, filters.fuente, filters.unidad]);
 
   // Helper function to find data for a specific combination
   const findDataForCell = (source: string, category: string, unit: string, palanca: string) => {
@@ -95,34 +83,34 @@ export function ExperimentTable({ filters }: ExperimentTableProps) {
     );
   };
 
-  // Create rows: Group by source, then category, then unit
+  // Create rows: Group by source, then unit, then category
   interface RowGroup {
     source: string;
-    category: string;
     unit: string;
+    category: string;
   }
 
   const rowGroups: RowGroup[] = [];
   const seenKeys = new Set<string>();
 
-  // Build unique combinations of source-category-unit
+  // Build unique combinations of source-unit-category
   resultsData.forEach(item => {
-    const key = `${item.source}|||${item.category}|||${item.unit}`;
+    const key = `${item.source}|||${item.unit}|||${item.category}`;
     if (!seenKeys.has(key)) {
       seenKeys.add(key);
       rowGroups.push({
         source: item.source,
-        category: item.category,
-        unit: item.unit
+        unit: item.unit,
+        category: item.category
       });
     }
   });
 
-  // Sort by source, then category, then unit
+  // Sort by source, then unit, then category
   rowGroups.sort((a, b) => {
     if (a.source !== b.source) return a.source.localeCompare(b.source);
-    if (a.category !== b.category) return a.category.localeCompare(b.category);
-    return a.unit.localeCompare(b.unit);
+    if (a.unit !== b.unit) return a.unit.localeCompare(b.unit);
+    return a.category.localeCompare(b.category);
   });
 
   // Calculate rowspan for each source
@@ -131,18 +119,18 @@ export function ExperimentTable({ filters }: ExperimentTableProps) {
     sourceRowspans.set(group.source, (sourceRowspans.get(group.source) || 0) + 1);
   });
 
-  // Calculate rowspan for each source-category combination
-  const categoryRowspans = new Map<string, number>();
+  // Calculate rowspan for each source-unit combination
+  const unitRowspans = new Map<string, number>();
   rowGroups.forEach(group => {
-    const key = `${group.source}|||${group.category}`;
-    categoryRowspans.set(key, (categoryRowspans.get(key) || 0) + 1);
+    const key = `${group.source}|||${group.unit}`;
+    unitRowspans.set(key, (unitRowspans.get(key) || 0) + 1);
   });
 
   if (loading) {
     return (
       <Card className="h-full bg-card shadow-sm">
         <CardContent className="flex items-center justify-center h-full">
-          <div className="text-muted-foreground">Cargando resultados...</div>
+          <div className="text-muted-foreground">Cargando datos de competencia...</div>
         </CardContent>
       </Card>
     );
@@ -162,7 +150,7 @@ export function ExperimentTable({ filters }: ExperimentTableProps) {
     return (
       <Card className="h-full bg-card shadow-sm">
         <CardContent className="flex items-center justify-center h-full">
-          <div className="text-muted-foreground">No hay datos disponibles para la tipología seleccionada</div>
+          <div className="text-muted-foreground">No hay datos de competencia disponibles</div>
         </CardContent>
       </Card>
     );
@@ -197,7 +185,7 @@ export function ExperimentTable({ filters }: ExperimentTableProps) {
         <ScrollArea className="h-full px-6 pb-6 pt-3">
           {/* Legend */}
           <div className="mb-4 inline-block">
-            <div className="px-3 py-2 bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/30 dark:to-green-950/30 rounded-lg border border-blue-200/50 dark:border-blue-800/50">
+            <div className="px-3 py-2 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 rounded-lg border border-red-200/50 dark:border-red-800/50">
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1">
@@ -218,8 +206,8 @@ export function ExperimentTable({ filters }: ExperimentTableProps) {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-40 text-muted-foreground font-medium">Fuente</TableHead>
-                <TableHead className="w-32 text-muted-foreground font-medium">Categoría</TableHead>
                 <TableHead className="w-32 text-muted-foreground font-medium">Unidad</TableHead>
+                <TableHead className="w-32 text-muted-foreground font-medium">Categoría</TableHead>
                 {palancas.map((palanca) => {
                   const IconComponent = getPalancaIcon(palanca);
 
@@ -237,44 +225,44 @@ export function ExperimentTable({ filters }: ExperimentTableProps) {
             <TableBody>
               {(() => {
                 let lastSource = '';
-                let lastCategory = '';
+                let lastUnit = '';
                 let sourceRowIndex = 0;
 
                 return rowGroups.map((group, index) => {
                   const isFirstRowOfSource = group.source !== lastSource;
                   const sourceRowspan = isFirstRowOfSource ? sourceRowspans.get(group.source) || 1 : 0;
 
-                  const categoryKey = `${group.source}|||${group.category}`;
-                  const isFirstRowOfCategory = group.source !== lastSource || group.category !== lastCategory;
-                  const categoryRowspan = isFirstRowOfCategory ? categoryRowspans.get(categoryKey) || 1 : 0;
+                  const unitKey = `${group.source}|||${group.unit}`;
+                  const isFirstRowOfUnit = group.source !== lastSource || group.unit !== lastUnit;
+                  const unitRowspan = isFirstRowOfUnit ? unitRowspans.get(unitKey) || 1 : 0;
 
                   if (isFirstRowOfSource) {
                     lastSource = group.source;
-                    lastCategory = group.category;
+                    lastUnit = group.unit;
                     sourceRowIndex = 0;
-                  } else if (isFirstRowOfCategory) {
-                    lastCategory = group.category;
+                  } else if (isFirstRowOfUnit) {
+                    lastUnit = group.unit;
                   } else {
                     sourceRowIndex++;
                   }
 
                   return (
-                    <TableRow key={`${group.source}_${group.category}_${group.unit}`} className="hover:bg-muted/50">
+                    <TableRow key={`${group.source}_${group.unit}_${group.category}`} className="hover:bg-muted/50">
                       {isFirstRowOfSource && (
                         <TableCell className="font-medium text-foreground" rowSpan={sourceRowspan}>
                           <div className="flex items-center gap-2">
-                            <div className="w-1 h-8 bg-gradient-to-b from-blue-600 to-green-600 rounded-full"></div>
+                            <div className="w-1 h-8 bg-gradient-to-b from-red-600 to-orange-600 rounded-full"></div>
                             <span>{group.source}</span>
                           </div>
                         </TableCell>
                       )}
-                      {isFirstRowOfCategory && (
-                        <TableCell className="font-medium text-sm text-foreground" rowSpan={categoryRowspan}>
-                          {group.category}
+                      {isFirstRowOfUnit && (
+                        <TableCell className="font-medium text-sm text-foreground" rowSpan={unitRowspan}>
+                          {group.unit}
                         </TableCell>
                       )}
                       <TableCell className="font-medium text-sm text-foreground">
-                        {group.unit}
+                        {group.category}
                       </TableCell>
                       {palancas.map((palanca) => {
                         const data = findDataForCell(group.source, group.category, group.unit, palanca);

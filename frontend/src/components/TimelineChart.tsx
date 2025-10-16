@@ -39,9 +39,24 @@ export function TimelineChart({ filters }: TimelineChartProps) {
     // Position the label at the top of the chart area
     const labelY = 12;
     const arrowY = labelY + 3;
+    const text = 'Fecha inicio de Palanca';
+
+    // Calculate text width (approximate)
+    const textWidth = text.length * 7;
+    const padding = 6;
 
     return (
       <g>
+        {/* Background rectangle */}
+        <rect
+          x={viewBox.x - textWidth / 2 - padding}
+          y={labelY - 12}
+          width={textWidth + padding * 2}
+          height={18}
+          fill={palancaColor}
+          opacity={0.15}
+          rx={4}
+        />
         {/* Label text */}
         <text
           x={viewBox.x}
@@ -51,7 +66,7 @@ export function TimelineChart({ filters }: TimelineChartProps) {
           fontSize="12"
           fontWeight="600"
         >
-          Fecha inicio de Palanca
+          {text}
         </text>
         {/* Arrow pointing down */}
         <polygon
@@ -130,10 +145,7 @@ export function TimelineChart({ filters }: TimelineChartProps) {
   if (missingFilters.length > 0) {
     return (
       <Card className="h-full bg-card shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-foreground">Evolución Temporal</CardTitle>
-        </CardHeader>
-        <CardContent className="flex items-center justify-center h-[calc(100%-80px)]">
+        <CardContent className="flex items-center justify-center h-full">
           <div className="text-center space-y-2">
             <p className="text-muted-foreground text-sm">
               Para visualizar la evolución, selecciona:
@@ -159,12 +171,7 @@ export function TimelineChart({ filters }: TimelineChartProps) {
 
   return (
     <Card className="h-full bg-card shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-foreground">
-          Evolución Temporal - {palancaName}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="h-[calc(100%-80px)]">
+      <CardContent className="h-full p-6">
         <div className="h-full">
           {evolutionData.length === 0 ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -216,7 +223,17 @@ export function TimelineChart({ filters }: TimelineChartProps) {
                   }
                 />
 
-                {/* Línea de control - gris discontinua */}
+                {/* Línea de palanca - color según tipología (primero en el orden) */}
+                <Line
+                  type="monotone"
+                  dataKey="palanca"
+                  stroke={palancaColor}
+                  strokeWidth={3}
+                  dot={{ r: 4, fill: palancaColor }}
+                  activeDot={{ r: 6, fill: palancaColor, stroke: "hsl(var(--background))", strokeWidth: 2 }}
+                />
+
+                {/* Línea de control - gris discontinua (segundo en el orden) */}
                 <Line
                   type="monotone"
                   dataKey="control"
@@ -225,16 +242,6 @@ export function TimelineChart({ filters }: TimelineChartProps) {
                   strokeDasharray="8 4"
                   dot={{ r: 4, fill: "hsl(var(--muted-foreground))" }}
                   activeDot={{ r: 6, fill: "hsl(var(--muted-foreground))", stroke: "hsl(var(--background))", strokeWidth: 2 }}
-                />
-
-                {/* Línea de palanca - color según tipología */}
-                <Line
-                  type="monotone"
-                  dataKey="palanca"
-                  stroke={palancaColor}
-                  strokeWidth={3}
-                  dot={{ r: 4, fill: palancaColor }}
-                  activeDot={{ r: 6, fill: palancaColor, stroke: "hsl(var(--background))", strokeWidth: 2 }}
                 />
               </LineChart>
             </ResponsiveContainer>

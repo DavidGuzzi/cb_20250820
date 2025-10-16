@@ -40,7 +40,8 @@ services:
       - .env
     volumes:
       - ./backend:/app
-      - ./app_db_20251008_2014.xlsx:/app/app_db_20251008_2014.xlsx
+      - ./app_db_20251015_1926.xlsx:/app/app_db_20251015_1926.xlsx
+      - ./df_ab_test_simulations.parquet:/app/df_ab_test_simulations.parquet
       - /app/__pycache__
     command: python run.py
     depends_on:

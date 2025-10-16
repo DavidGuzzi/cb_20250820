@@ -13,22 +13,22 @@ This is a full-stack retail data analysis application consisting of:
 
 ### Docker Development (Recommended)
 
-#### Local Development:
+#### PostgreSQL Development:
 ```bash
 # Setup environment
-cp .env.local .env  # For local development
+cp .env.example .env  # Add your OPENAI_API_KEY
 
-# Start all services locally
-docker-compose -f docker-compose.local.yml up -d
+# Start all services (PostgreSQL + Backend + Frontend)
+docker-compose -f docker-compose.postgres.yml up -d
 
 # View logs
-docker-compose -f docker-compose.local.yml logs -f
+docker-compose -f docker-compose.postgres.yml logs -f
 
 # Stop services
-docker-compose -f docker-compose.local.yml down
+docker-compose -f docker-compose.postgres.yml down
 ```
 
-#### Legacy Docker (still works):
+#### Legacy Docker (In-Memory SQLite):
 ```bash
 # Setup environment
 cp .env.example .env  # Add your OPENAI_API_KEY
@@ -255,10 +255,10 @@ The Analysis area now features a unified "Simulaciones" section replacing the pr
 ### Data Layer
 - **PostgreSQL Database**: Unified data source for both Dashboard and Chatbot
 - **225 stores** with A/B testing data across multiple cities
-- **10 master tables + 2 fact tables**: Normalized schema for scalability
+- **11 master tables + 2 fact tables**: Normalized schema for scalability
 - **Text-to-SQL**: Natural language queries executed on PostgreSQL
 - **Real-time analytics**: Cache performance and session metrics
-- **38,470+ records**: Including experiments, stores, periods, and categories
+- **40,550+ records**: Including experiments, stores, periods, categories, and audits
 
 ## Development Workflow
 
@@ -426,7 +426,7 @@ The chatbot interface has been significantly improved for better user experience
 ## PostgreSQL Database
 
 ### Schema Overview
-- **10 Master Tables**:
+- **11 Master Tables**:
   - `city_master`: City names (Bogotá, Medellín, Cali, etc.)
   - `typology_master`: Store types (Super e hiper, Conveniencia, Droguerías)
   - `lever_master`: Marketing levers/palancas (Punta de góndola, Metro cuadrado, etc.)
@@ -435,6 +435,7 @@ The chatbot interface has been significantly improved for better user experience
   - `data_source_master`: Data sources (Sell In, Sell Out, Sell Out - SOM, etc.)
   - `period_master`: Time periods with start/end dates
   - `store_master`: 225 stores with city, typology, and lever assignments
+  - `audit_master`: 2,082 audit records tracking store visits by week (172 unique stores, 10 weeks)
 
 - **2 Fact Tables**:
   - `ab_test_result`: 37,840 rows - Detailed A/B test results by store/period
@@ -625,6 +626,27 @@ gcloud run logs tail retail-backend --region=us-central1 | grep -i "utf\|ascii\|
 ---
 
 ## Recent Updates
+
+### 2025-10-15: New Audit Master Table
+**Database Schema Update:**
+- **New Table**: `audit_master` added to track store audit visits
+  - **2,082 audit records** across 172 unique stores
+  - **10 weeks** of audit data (Ruta SEMANA 1 through 10)
+  - **Tracks**: Store code (cod_pdv), week, date, hour, and typology
+  - **Date Range**: 6/10/2025 to 8/9/2025
+- **Schema Updates**:
+  - Updated `backend/database/schema.sql` with new table definition
+  - Added indexes on `cod_pdv`, `week`, and `typology_id`
+  - Added auto-update trigger for `updated_at` column
+- **Migration Script**: Updated `migrate_excel_to_postgres.py` to include `audit_master` from Excel sheet
+- **Database Dump**: Regenerated `init_complete.sql` (127 MB, 1,087,085 lines)
+- **Total Records**: Now 40,550+ records across all tables (previously 38,470+)
+
+**Files Modified:**
+- `backend/database/schema.sql`: Added audit_master table with full schema
+- `backend/scripts/migrate_excel_to_postgres.py`: Updated to process audit_master from app_db_20251015_1926.xlsx
+- `backend/database/init_complete.sql`: Regenerated with audit_master data
+- `CLAUDE.md`: Updated documentation to reflect 11 master tables
 
 ### 2025-10-13: Interactive Simulaciones Section
 **New Feature - Custom Palanca Calculator:**

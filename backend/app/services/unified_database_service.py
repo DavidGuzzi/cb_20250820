@@ -94,6 +94,7 @@ class UnifiedDatabaseService:
                       AND (:unidad IS NULL OR unit_name = :unidad)
                       AND (:categoria IS NULL OR category_name = :categoria)
                       AND lever_name != 'Control'
+                      AND category_name NOT IN ('Electrolit', 'Powerade', 'Otros')
                     ORDER BY source_name, category_name, unit_name, lever_name
                 """)
 
@@ -164,6 +165,119 @@ class UnifiedDatabaseService:
 
         except Exception as e:
             logger.error(f"Error in get_dashboard_results: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'data': [],
+                'palancas': [],
+                'sources': [],
+                'categories': [],
+                'units': []
+            }
+
+    def get_competition_results(
+        self,
+        tipologia: Optional[str] = None,
+        fuente: Optional[str] = None,
+        unidad: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Obtiene datos de competencia (Gatorade principal, Electrolit, Powerade, Otros) para la tabla Competition
+        Compatible con endpoint: /api/dashboard/competition-results
+        Formato: Por fuente (agrupada), luego unidad, luego categoría
+        """
+        try:
+            with self.get_session() as session:
+                # Query for competition categories
+                # Include Gatorade only for SOM sources, always include competition brands
+                query = text("""
+                    SELECT
+                        source_name,
+                        typology_name,
+                        lever_name,
+                        category_name,
+                        unit_name,
+                        average_variation,
+                        difference_vs_control
+                    FROM v_dashboard_summary
+                    WHERE (:tipologia IS NULL OR typology_name = :tipologia)
+                      AND (:fuente IS NULL OR source_name = :fuente)
+                      AND (:unidad IS NULL OR unit_name = :unidad)
+                      AND lever_name != 'Control'
+                      AND (
+                        category_name IN ('Electrolit', 'Powerade', 'Otros')
+                        OR (
+                          category_name = 'Gatorade'
+                          AND source_name IN ('Sell Out - SOM', 'Sell Out - SOM - HIDR')
+                        )
+                      )
+                    ORDER BY source_name, unit_name, category_name, lever_name
+                """)
+
+                result = session.execute(query, {
+                    'tipologia': tipologia,
+                    'fuente': fuente,
+                    'unidad': unidad
+                })
+                rows = result.fetchall()
+
+                # Convert to dict format expected by frontend
+                data = []
+                for row in rows:
+                    # Handle NaN/None values
+                    avg_var = row.average_variation
+                    if avg_var is None:
+                        avg_var_value = 0.0
+                    else:
+                        try:
+                            avg_var_value = float(avg_var)
+                            if math.isnan(avg_var_value):
+                                avg_var_value = 0.0
+                        except (ValueError, TypeError):
+                            avg_var_value = 0.0
+
+                    diff_control = row.difference_vs_control
+                    if diff_control is None:
+                        diff_control_value = 0.0
+                    else:
+                        try:
+                            diff_control_value = float(diff_control)
+                            if math.isnan(diff_control_value):
+                                diff_control_value = 0.0
+                        except (ValueError, TypeError):
+                            diff_control_value = 0.0
+
+                    data.append({
+                        'source': row.source_name,
+                        'category': row.category_name,
+                        'unit': row.unit_name,
+                        'palanca': row.lever_name,
+                        'variacion_promedio': avg_var_value,
+                        'diferencia_vs_control': diff_control_value
+                    })
+
+                # Extract unique palancas, sources, categories, and units
+                palancas = sorted(list(set(item['palanca'] for item in data)))
+                sources = sorted(list(set(item['source'] for item in data)))
+                categories = sorted(list(set(item['category'] for item in data)))
+                units = sorted(list(set(item['unit'] for item in data)))
+
+                return {
+                    'success': True,
+                    'data': data,
+                    'palancas': palancas,
+                    'sources': sources,
+                    'categories': categories,
+                    'units': units,
+                    'filtered_by': {
+                        'tipologia': tipologia,
+                        'fuente': fuente,
+                        'unidad': unidad
+                    }
+                }
+
+        except Exception as e:
+            logger.error(f"Error in get_competition_results: {e}")
             return {
                 'success': False,
                 'error': str(e),
@@ -468,6 +582,7 @@ class UnifiedDatabaseService:
         try:
             with self.get_session() as session:
                 # Get palancas used by stores of the specified tipologia
+                # Exclude "Tienda multipalanca" for Droguerías
                 query = text("""
                     SELECT DISTINCT l.lever_name
                     FROM store_master s
@@ -475,6 +590,7 @@ class UnifiedDatabaseService:
                     JOIN typology_master t ON s.typology_id = t.typology_id
                     WHERE t.typology_name = :tipologia
                       AND l.lever_name != 'Control'
+                      AND NOT (t.typology_name = 'Droguerías' AND l.lever_name = 'Tienda multipalanca')
                       AND s.is_active = TRUE
                     ORDER BY l.lever_name
                 """)
@@ -541,7 +657,7 @@ class UnifiedDatabaseService:
         """
         try:
             with self.get_session() as session:
-                # Get categories that have results for this tipologia
+                # Get categories that have results for this tipologia (exclude competition)
                 query = text("""
                     SELECT DISTINCT c.category_name
                     FROM ab_test_result r
@@ -550,6 +666,7 @@ class UnifiedDatabaseService:
                     JOIN category_master c ON r.category_id = c.category_id
                     WHERE t.typology_name = :tipologia
                       AND s.is_active = TRUE
+                      AND c.category_name NOT IN ('Electrolit', 'Powerade', 'Otros')
                 """)
 
                 result = session.execute(query, {'tipologia': tipologia})
@@ -596,12 +713,12 @@ class UnifiedDatabaseService:
                 palanca_query = text("SELECT lever_name FROM lever_master WHERE lever_name != 'Control' ORDER BY lever_name")
                 palancas = [row.lever_name for row in session.execute(palanca_query)]
 
-                # Get categories (KPIs)
-                kpi_query = text("SELECT category_name FROM category_master")
+                # Get categories (KPIs) - exclude competition categories
+                kpi_query = text("SELECT category_name FROM category_master WHERE category_name NOT IN ('Electrolit', 'Powerade', 'Otros')")
                 kpis_raw = [row.category_name for row in session.execute(kpi_query)]
 
-                # Custom order for categorías
-                categoria_order = ['Gatorade', 'Gatorade 500ml', 'Gatorade 1000ml', 'Gatorade Sugar-free', 'Electrolit', 'Powerade', 'Otros']
+                # Custom order for categorías (exclude competition)
+                categoria_order = ['Gatorade', 'Gatorade 500ml', 'Gatorade 1000ml', 'Gatorade Sugar-free']
                 kpis = [c for c in categoria_order if c in kpis_raw]
                 # Add any remaining categories not in the custom order
                 kpis.extend([c for c in kpis_raw if c not in categoria_order])
@@ -635,6 +752,70 @@ class UnifiedDatabaseService:
                 'fuente_datos': [],
                 'unidad_medida': [],
                 'categoria': []
+            }
+
+    def get_pdv_summary(
+        self,
+        tipologia: str,
+        palanca: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Obtiene resumen de PDV por tipología
+        Control vs Foco (palanca seleccionada o total de tipología)
+        Compatible con endpoint: /api/dashboard/pdv-summary
+        """
+        try:
+            with self.get_session() as session:
+                # Query to get control and foco counts
+                if palanca:
+                    # With palanca: Control vs specific palanca
+                    query = text("""
+                        SELECT
+                            COUNT(*) FILTER (WHERE l.lever_name = 'Control') as control_count,
+                            COUNT(*) FILTER (WHERE l.lever_name = :palanca) as foco_count
+                        FROM store_master s
+                        JOIN lever_master l ON s.lever_id = l.lever_id
+                        JOIN typology_master t ON s.typology_id = t.typology_id
+                        WHERE t.typology_name = :tipologia
+                          AND s.is_active = TRUE
+                    """)
+                    result = session.execute(query, {
+                        'tipologia': tipologia,
+                        'palanca': palanca
+                    })
+                else:
+                    # Without palanca: Control vs All non-Control (Foco = total - control)
+                    query = text("""
+                        SELECT
+                            COUNT(*) FILTER (WHERE l.lever_name = 'Control') as control_count,
+                            COUNT(*) FILTER (WHERE l.lever_name != 'Control') as foco_count
+                        FROM store_master s
+                        JOIN lever_master l ON s.lever_id = l.lever_id
+                        JOIN typology_master t ON s.typology_id = t.typology_id
+                        WHERE t.typology_name = :tipologia
+                          AND s.is_active = TRUE
+                    """)
+                    result = session.execute(query, {
+                        'tipologia': tipologia
+                    })
+
+                row = result.fetchone()
+
+                return {
+                    'success': True,
+                    'control_count': row.control_count if row else 0,
+                    'foco_count': row.foco_count if row else 0,
+                    'tipologia': tipologia,
+                    'palanca': palanca
+                }
+
+        except Exception as e:
+            logger.error(f"Error in get_pdv_summary: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'control_count': 0,
+                'foco_count': 0
             }
 
     def get_radar_chart_data(

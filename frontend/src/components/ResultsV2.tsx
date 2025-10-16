@@ -198,10 +198,10 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="flex items-center gap-3">
-              <img 
-                src={theme === 'dark' ? gatoradeLogoDark : gatoradeLogo} 
-                alt="Gatorade Logo" 
-                className="w-10 h-10 object-contain"
+              <img
+                src={theme === 'dark' ? gatoradeLogoDark : gatoradeLogo}
+                alt="Gatorade Logo"
+                className="w-14 h-14 object-contain"
               />
               <h1 className="text-xl font-bold text-foreground">
                 Gatorade A/B Testing

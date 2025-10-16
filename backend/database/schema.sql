@@ -94,6 +94,18 @@ CREATE TABLE store_master (
     -- Note: No UNIQUE constraints on store codes because "-" appears multiple times
 );
 
+-- Audit Master (Auditorías de tiendas por semana)
+CREATE TABLE audit_master (
+    id SERIAL PRIMARY KEY,
+    cod_pdv BIGINT NOT NULL,  -- Store code (can be sellin or sellout code)
+    week VARCHAR(50) NOT NULL,  -- Week label (e.g., "Ruta SEMANA 1")
+    date VARCHAR(20) NOT NULL,  -- Date as text (e.g., "6/10/2025")
+    hour VARCHAR(20) NOT NULL,  -- Time as text (e.g., "10:44 PM")
+    typology_id INTEGER NOT NULL REFERENCES typology_master(typology_id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ============================================================================
 -- FACT TABLES (Tablas de Hechos)
 -- ============================================================================
@@ -264,6 +276,11 @@ CREATE INDEX idx_store_typology ON store_master(typology_id);
 CREATE INDEX idx_store_lever ON store_master(lever_id);
 CREATE INDEX idx_store_active ON store_master(is_active) WHERE is_active = TRUE;
 
+-- Indexes on audit_master
+CREATE INDEX idx_audit_cod_pdv ON audit_master(cod_pdv);
+CREATE INDEX idx_audit_week ON audit_master(week);
+CREATE INDEX idx_audit_typology ON audit_master(typology_id);
+
 -- Indexes on period_master
 CREATE INDEX idx_period_dates ON period_master(start_date, end_date);
 CREATE INDEX idx_period_type ON period_master(period_type);
@@ -379,6 +396,7 @@ CREATE TRIGGER update_measurement_unit_master_updated_at BEFORE UPDATE ON measur
 CREATE TRIGGER update_data_source_master_updated_at BEFORE UPDATE ON data_source_master FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_period_master_updated_at BEFORE UPDATE ON period_master FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_store_master_updated_at BEFORE UPDATE ON store_master FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_audit_master_updated_at BEFORE UPDATE ON audit_master FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_ab_test_result_updated_at BEFORE UPDATE ON ab_test_result FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_ab_test_summary_updated_at BEFORE UPDATE ON ab_test_summary FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_capex_fee_updated_at BEFORE UPDATE ON capex_fee FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -396,6 +414,7 @@ COMMENT ON TABLE measurement_unit_master IS 'Maestro de unidades de medida';
 COMMENT ON TABLE data_source_master IS 'Maestro de fuentes de datos (Sell In, Sell Out)';
 COMMENT ON TABLE period_master IS 'Maestro de períodos temporales';
 COMMENT ON TABLE store_master IS 'Maestro de tiendas (PDVs) con códigos sell-in/sell-out';
+COMMENT ON TABLE audit_master IS 'Registro de auditorías de tiendas por semana con fecha y hora';
 COMMENT ON TABLE ab_test_result IS 'Resultados detallados de pruebas A/B por tienda y período';
 COMMENT ON TABLE ab_test_summary IS 'Resúmenes agregados de pruebas A/B por tipología y palanca';
 COMMENT ON TABLE capex_fee IS 'Costos CAPEX y Fee por tipología y palanca para cálculos de ROI';
