@@ -1,6 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
+import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { TrendingUp, TrendingDown, Target, Zap, Star, Settings, Users, ShoppingCart, TrendingDown as Triangle, Award, Compass, Gift, MapPin, Palette, Rocket } from 'lucide-react';
 import { useState, useEffect, Fragment } from 'react';
 import { apiService } from '../services/api';
@@ -24,16 +25,30 @@ const CellValue = ({
   variacion_promedio: number;
   diferencia_vs_control: number;
 }) => (
-  <div className="text-center">
-    <div className={`font-medium text-sm ${
-      diferencia_vs_control >= 0 ? 'text-green-600' : 'text-red-600'
-    }`}>
-      {diferencia_vs_control >= 0 ? '+' : ''}{(diferencia_vs_control * 100).toFixed(1)}%
-      <span className="text-xs text-muted-foreground ml-1">
-        ({variacion_promedio >= 0 ? '+' : ''}{(variacion_promedio * 100).toFixed(1)}%)
-      </span>
-    </div>
-  </div>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <div className="text-center cursor-help">
+        <div className={`font-medium text-sm ${
+          diferencia_vs_control >= 0 ? 'text-green-600' : 'text-red-600'
+        }`}>
+          {diferencia_vs_control >= 0 ? '+' : ''}{(diferencia_vs_control * 100).toFixed(1)}%
+          <span className="text-xs text-muted-foreground ml-1">
+            ({variacion_promedio >= 0 ? '+' : ''}{(variacion_promedio * 100).toFixed(1)}%)
+          </span>
+        </div>
+      </div>
+    </TooltipTrigger>
+    <TooltipContent side="top" className="max-w-xs">
+      <div className="space-y-1">
+        <div className="font-semibold">
+          Cambio vs. Control: {diferencia_vs_control >= 0 ? '+' : ''}{(diferencia_vs_control * 100).toFixed(1)}%
+        </div>
+        <div className="text-xs opacity-90">
+          Variación de la Palanca: ({variacion_promedio >= 0 ? '+' : ''}{(variacion_promedio * 100).toFixed(1)}%)
+        </div>
+      </div>
+    </TooltipContent>
+  </Tooltip>
 );
 
 export function ExperimentTable({ filters }: ExperimentTableProps) {
@@ -195,25 +210,6 @@ export function ExperimentTable({ filters }: ExperimentTableProps) {
     <Card className="h-full bg-card shadow-sm border-0 shadow-none">
       <CardContent className="h-full p-0">
         <ScrollArea className="h-full px-6 pb-6 pt-3">
-          {/* Legend */}
-          <div className="mb-4 inline-block">
-            <div className="px-3 py-2 bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/30 dark:to-green-950/30 rounded-lg border border-blue-200/50 dark:border-blue-800/50">
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1">
-                    <span className="text-green-600 font-semibold text-sm">+X%</span>
-                    <span className="text-muted-foreground text-xs">/</span>
-                    <span className="text-red-600 font-semibold text-sm">-X%</span>
-                  </div>
-                  <span className="text-xs text-foreground">Cambio vs. Control</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground font-medium text-sm">(±X%)</span>
-                  <span className="text-xs text-foreground">Variación de la Palanca</span>
-                </div>
-              </div>
-            </div>
-          </div>
           <Table>
             <TableHeader>
               <TableRow>

@@ -95,6 +95,7 @@ class UnifiedDatabaseService:
                       AND (:categoria IS NULL OR category_name = :categoria)
                       AND lever_name != 'Control'
                       AND category_name NOT IN ('Electrolit', 'Powerade', 'Otros')
+                      AND NOT (typology_name = 'Droguerías' AND lever_name = 'Tienda multipalanca')
                     ORDER BY source_name, category_name, unit_name, lever_name
                 """)
 
@@ -204,6 +205,7 @@ class UnifiedDatabaseService:
                       AND (:fuente IS NULL OR source_name = :fuente)
                       AND (:unidad IS NULL OR unit_name = :unidad)
                       AND lever_name != 'Control'
+                      AND NOT (typology_name = 'Droguerías' AND lever_name = 'Tienda multipalanca')
                       AND (
                         category_name IN ('Electrolit', 'Powerade', 'Otros')
                         OR (
@@ -396,9 +398,10 @@ class UnifiedDatabaseService:
                 }
 
             with self.get_session() as session:
-                # Query 0: Calculate project start date (mode) based on data source
-                # Determine which start_date column to use
+                # Query 0: Calculate project start date (mode) and end date (max) based on data source
+                # Determine which columns to use
                 start_date_column = 'start_date_sellin' if fuente == 'Sell In' else 'start_date_sellout'
+                end_date_column = 'end_date_sellin' if fuente == 'Sell In' else 'end_date_sellout'
 
                 project_start_query = text(f"""
                     SELECT {start_date_column} as start_date, COUNT(*) as count
@@ -420,6 +423,29 @@ class UnifiedDatabaseService:
                 })
                 project_start_row = project_start_result.fetchone()
                 project_start_date = project_start_row.start_date if project_start_row else None
+
+                # Query 0b: Calculate palanca end date (maximum end date from stores with this palanca)
+                palanca_end_query = text(f"""
+                    SELECT MAX({end_date_column}) as end_date
+                    FROM store_master s
+                    JOIN typology_master t ON s.typology_id = t.typology_id
+                    JOIN lever_master l ON s.lever_id = l.lever_id
+                    WHERE t.typology_name = :tipologia
+                      AND l.lever_name = :palanca
+                      AND s.is_active = TRUE
+                      AND {end_date_column} IS NOT NULL
+                """)
+
+                palanca_end_result = session.execute(palanca_end_query, {
+                    'tipologia': tipologia,
+                    'palanca': palanca
+                })
+                palanca_end_row = palanca_end_result.fetchone()
+                palanca_end_date = palanca_end_row.end_date if palanca_end_row else None
+
+                # Determine which date to use for X-axis based on data source
+                # Sell Out sources use end_date, Sell In uses start_date
+                is_sell_out = fuente and ('Sell Out' in fuente or 'SOM' in fuente)
 
                 # Query 1: Get palanca data (avg value per period for selected lever)
                 palanca_query = text("""
@@ -498,22 +524,39 @@ class UnifiedDatabaseService:
                 # Build dictionaries for easy lookup by period_label
                 palanca_dict = {}
                 for row in palanca_rows:
-                    # Only include periods from first positive value onwards
-                    if first_positive_date and row.start_date >= first_positive_date:
+                    # Only include periods from first positive value onwards AND before palanca end date
+                    include_period = (
+                        first_positive_date and
+                        row.start_date >= first_positive_date and
+                        (not palanca_end_date or row.start_date <= palanca_end_date)
+                    )
+                    if include_period:
+                        # Use end_date for Sell Out sources, start_date for Sell In
+                        display_date = row.end_date if is_sell_out else row.start_date
                         palanca_dict[row.period_label] = {
                             'value': float(row.avg_value) if row.avg_value else 0.0,
                             'start_date': row.start_date,
-                            'end_date': row.end_date
+                            'end_date': row.end_date,
+                            'display_date': display_date
                         }
 
                 control_dict = {}
                 for row in control_rows:
-                    # Only include periods from first positive value onwards
-                    if first_positive_date and row.start_date >= first_positive_date:
+                    # Only include periods from first positive value onwards AND before palanca end date
+                    # Control should match the same date range as palanca
+                    include_period = (
+                        first_positive_date and
+                        row.start_date >= first_positive_date and
+                        (not palanca_end_date or row.start_date <= palanca_end_date)
+                    )
+                    if include_period:
+                        # Use end_date for Sell Out sources, start_date for Sell In
+                        display_date = row.end_date if is_sell_out else row.start_date
                         control_dict[row.period_label] = {
                             'value': float(row.avg_value) if row.avg_value else 0.0,
                             'start_date': row.start_date,
-                            'end_date': row.end_date
+                            'end_date': row.end_date,
+                            'display_date': display_date
                         }
 
                 # Get all unique periods (only from first positive onwards)
@@ -533,21 +576,33 @@ class UnifiedDatabaseService:
                     palanca_value = palanca_dict.get(period_label, {}).get('value', None)
                     control_value = control_dict.get(period_label, {}).get('value', None)
                     start_date = period_info['start_date']
+                    display_date = period_info.get('display_date', start_date)
 
-                    # Format date as DD/MM
-                    date_formatted = start_date.strftime('%d/%m') if start_date else period_label
+                    # Format date as DD/MM (using display_date which is end_date for Sell Out, start_date for Sell In)
+                    date_formatted = display_date.strftime('%d/%m') if display_date else period_label
 
                     timeline_data.append({
                         'period': period_label,
                         'period_label': period_label,
                         'start_date': start_date.isoformat() if start_date else None,
+                        'display_date': display_date.isoformat() if display_date else None,
                         'date_formatted': date_formatted,
                         'palanca_value': palanca_value,
                         'control_value': control_value
                     })
 
-                # Format project start date as DD/MM for frontend
-                project_start_formatted = project_start_date.strftime('%d/%m') if project_start_date else None
+                # Format project start and end dates as DD/MM for frontend
+                # For Sell Out sources, adjust the marker to show end of previous month if start is on 1st
+                project_start_display = project_start_date
+                if is_sell_out and project_start_date:
+                    # If project starts on the 1st of a month, display marker at end of previous month
+                    if project_start_date.day == 1:
+                        # Get last day of previous month
+                        from datetime import timedelta
+                        project_start_display = project_start_date - timedelta(days=1)
+
+                project_start_formatted = project_start_display.strftime('%d/%m') if project_start_display else None
+                palanca_end_formatted = palanca_end_date.strftime('%d/%m') if palanca_end_date else None
 
                 return {
                     'success': True,
@@ -556,6 +611,8 @@ class UnifiedDatabaseService:
                     'tipologia': tipologia,
                     'project_start_date': project_start_date.isoformat() if project_start_date else None,
                     'project_start_formatted': project_start_formatted,
+                    'palanca_end_date': palanca_end_date.isoformat() if palanca_end_date else None,
+                    'palanca_end_formatted': palanca_end_formatted,
                     'filtered_by': {
                         'tipologia': tipologia,
                         'fuente': fuente,
@@ -760,22 +817,26 @@ class UnifiedDatabaseService:
         palanca: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Obtiene resumen de PDV por tipología
+        Obtiene resumen de PDV y Visitas por tipología
         Control vs Foco (palanca seleccionada o total de tipología)
+        Incluye recuento de visitas desde audit_master
         Compatible con endpoint: /api/dashboard/pdv-summary
         """
         try:
             with self.get_session() as session:
-                # Query to get control and foco counts
+                # Query to get control/foco PDV counts AND audit visit counts
                 if palanca:
                     # With palanca: Control vs specific palanca
                     query = text("""
                         SELECT
-                            COUNT(*) FILTER (WHERE l.lever_name = 'Control') as control_count,
-                            COUNT(*) FILTER (WHERE l.lever_name = :palanca) as foco_count
+                            COUNT(DISTINCT s.id) FILTER (WHERE l.lever_name = 'Control') as control_count,
+                            COUNT(DISTINCT s.id) FILTER (WHERE l.lever_name = :palanca) as foco_count,
+                            COUNT(DISTINCT a.id) FILTER (WHERE l.lever_name = 'Control') as control_visits,
+                            COUNT(DISTINCT a.id) FILTER (WHERE l.lever_name = :palanca) as foco_visits
                         FROM store_master s
                         JOIN lever_master l ON s.lever_id = l.lever_id
                         JOIN typology_master t ON s.typology_id = t.typology_id
+                        LEFT JOIN audit_master a ON s.store_code_sellin = a.store_code_sellin
                         WHERE t.typology_name = :tipologia
                           AND s.is_active = TRUE
                     """)
@@ -787,11 +848,14 @@ class UnifiedDatabaseService:
                     # Without palanca: Control vs All non-Control (Foco = total - control)
                     query = text("""
                         SELECT
-                            COUNT(*) FILTER (WHERE l.lever_name = 'Control') as control_count,
-                            COUNT(*) FILTER (WHERE l.lever_name != 'Control') as foco_count
+                            COUNT(DISTINCT s.id) FILTER (WHERE l.lever_name = 'Control') as control_count,
+                            COUNT(DISTINCT s.id) FILTER (WHERE l.lever_name != 'Control') as foco_count,
+                            COUNT(DISTINCT a.id) FILTER (WHERE l.lever_name = 'Control') as control_visits,
+                            COUNT(DISTINCT a.id) FILTER (WHERE l.lever_name != 'Control') as foco_visits
                         FROM store_master s
                         JOIN lever_master l ON s.lever_id = l.lever_id
                         JOIN typology_master t ON s.typology_id = t.typology_id
+                        LEFT JOIN audit_master a ON s.store_code_sellin = a.store_code_sellin
                         WHERE t.typology_name = :tipologia
                           AND s.is_active = TRUE
                     """)
@@ -805,6 +869,8 @@ class UnifiedDatabaseService:
                     'success': True,
                     'control_count': row.control_count if row else 0,
                     'foco_count': row.foco_count if row else 0,
+                    'control_visits': row.control_visits if row else 0,
+                    'foco_visits': row.foco_visits if row else 0,
                     'tipologia': tipologia,
                     'palanca': palanca
                 }
@@ -815,7 +881,9 @@ class UnifiedDatabaseService:
                 'success': False,
                 'error': str(e),
                 'control_count': 0,
-                'foco_count': 0
+                'foco_count': 0,
+                'control_visits': 0,
+                'foco_visits': 0
             }
 
     def get_radar_chart_data(
@@ -848,6 +916,7 @@ class UnifiedDatabaseService:
                         WHERE l.lever_name != 'Control'
                           AND t.typology_name = :tipologia
                           AND s.category_id NOT IN (5, 6, 7)
+                          AND NOT (t.typology_name = 'Droguerías' AND l.lever_name = 'Tienda multipalanca')
                           AND (:fuente IS NULL OR s.source_id = (SELECT source_id FROM data_source_master WHERE source_name = :fuente))
                           AND (:unidad IS NULL OR s.unit_id = (SELECT unit_id FROM measurement_unit_master WHERE unit_name = :unidad))
                           AND (:categoria IS NULL OR s.category_id = (SELECT category_id FROM category_master WHERE category_name = :categoria))
@@ -866,6 +935,7 @@ class UnifiedDatabaseService:
                         JOIN lever_master l ON s.lever_id = l.lever_id
                         WHERE l.lever_name != 'Control'
                           AND s.category_id NOT IN (5, 6, 7)
+                          AND NOT (t.typology_name = 'Droguerías' AND l.lever_name = 'Tienda multipalanca')
                           AND (:fuente IS NULL OR s.source_id = (SELECT source_id FROM data_source_master WHERE source_name = :fuente))
                           AND (:unidad IS NULL OR s.unit_id = (SELECT unit_id FROM measurement_unit_master WHERE unit_name = :unidad))
                           AND (:categoria IS NULL OR s.category_id = (SELECT category_id FROM category_master WHERE category_name = :categoria))
@@ -1118,6 +1188,316 @@ VISTA: v_evolution_timeline
         except Exception as e:
             logger.error(f"Health check failed: {e}")
             return False
+
+    # ========================================================================
+    # SIMULATION METHODS
+    # ========================================================================
+
+    def get_ols_params(self, tipologia: str) -> Dict[str, Any]:
+        """
+        Get OLS model parameters for a specific tipologia
+        Returns coefficients from appropriate ols_params_* table
+        """
+        try:
+            # Map tipologia to table name
+            table_mapping = {
+                'Super e hiper': 'ols_params_super_hiper',
+                'Conveniencia': 'ols_params_conveniencia',
+                'Droguerías': 'ols_params_drogas'
+            }
+
+            table_name = table_mapping.get(tipologia)
+            if not table_name:
+                return {
+                    'success': False,
+                    'error': f'Tipología no válida: {tipologia}',
+                    'params': {}
+                }
+
+            with self.get_session() as session:
+                query = text(f"""
+                    SELECT feature, parametro
+                    FROM {table_name}
+                    ORDER BY feature
+                """)
+                result = session.execute(query)
+                rows = result.fetchall()
+
+                # Convert to dict
+                params = {row.feature: float(row.parametro) for row in rows}
+
+                return {
+                    'success': True,
+                    'params': params,
+                    'tipologia': tipologia,
+                    'table': table_name
+                }
+
+        except Exception as e:
+            logger.error(f"Error in get_ols_params: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'params': {}
+            }
+
+    def get_capex_fee_by_palancas(self, tipologia: str, palancas: List[str]) -> Dict[str, Any]:
+        """
+        Get CAPEX and Fee costs for selected palancas in a tipologia
+        Returns itemized breakdown and totals (in USD)
+        """
+        try:
+            with self.get_session() as session:
+                # Get tipologia_id
+                tipologia_query = text("""
+                    SELECT typology_id
+                    FROM typology_master
+                    WHERE typology_name = :tipologia
+                """)
+                tipologia_result = session.execute(tipologia_query, {'tipologia': tipologia})
+                tipologia_row = tipologia_result.fetchone()
+
+                if not tipologia_row:
+                    return {
+                        'success': False,
+                        'error': f'Tipología no encontrada: {tipologia}',
+                        'breakdown': [],
+                        'total_capex_usd': 0,
+                        'total_fee_usd': 0
+                    }
+
+                tipologia_id = tipologia_row.typology_id
+
+                # Get lever_ids for palancas
+                lever_query = text("""
+                    SELECT lever_id, lever_name
+                    FROM lever_master
+                    WHERE lever_name = ANY(:palancas)
+                """)
+                lever_result = session.execute(lever_query, {'palancas': palancas})
+                lever_rows = lever_result.fetchall()
+
+                if not lever_rows:
+                    return {
+                        'success': False,
+                        'error': 'No se encontraron palancas válidas',
+                        'breakdown': [],
+                        'total_capex_usd': 0,
+                        'total_fee_usd': 0
+                    }
+
+                lever_ids = [row.lever_id for row in lever_rows]
+
+                # Get capex/fee data
+                capex_query = text("""
+                    SELECT
+                        l.lever_name,
+                        c.capex,
+                        c.fee
+                    FROM capex_fee c
+                    JOIN lever_master l ON c.lever_id = l.lever_id
+                    WHERE c.typology_id = :tipologia_id
+                      AND c.lever_id = ANY(:lever_ids)
+                    ORDER BY l.lever_name
+                """)
+                capex_result = session.execute(capex_query, {
+                    'tipologia_id': tipologia_id,
+                    'lever_ids': lever_ids
+                })
+                capex_rows = capex_result.fetchall()
+
+                # Build breakdown
+                breakdown = []
+                total_capex = 0.0
+                total_fee = 0.0
+
+                for row in capex_rows:
+                    capex_val = float(row.capex) if row.capex else 0.0
+                    fee_val = float(row.fee) if row.fee else 0.0
+
+                    breakdown.append({
+                        'palanca': row.lever_name,
+                        'capex_usd': capex_val,
+                        'fee_usd': fee_val
+                    })
+
+                    total_capex += capex_val
+                    total_fee += fee_val
+
+                return {
+                    'success': True,
+                    'breakdown': breakdown,
+                    'total_capex_usd': total_capex,
+                    'total_fee_usd': total_fee,
+                    'tipologia': tipologia
+                }
+
+        except Exception as e:
+            logger.error(f"Error in get_capex_fee_by_palancas: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'breakdown': [],
+                'total_capex_usd': 0,
+                'total_fee_usd': 0
+            }
+
+    def calculate_simulation(
+        self,
+        tipologia: str,
+        palancas: List[str],
+        tamano_tienda: str,
+        features: Dict[str, float],
+        maco: float,
+        exchange_rate: float
+    ) -> Dict[str, Any]:
+        """
+        Calculate simulation results using OLS model
+        Returns uplift, ROI, payback, and financial breakdown
+        """
+        try:
+            # 1. Get OLS parameters
+            ols_data = self.get_ols_params(tipologia)
+            if not ols_data['success']:
+                return {
+                    'success': False,
+                    'error': ols_data['error']
+                }
+
+            ols_params = ols_data['params']
+
+            # 2. Get CAPEX/Fee data
+            capex_data = self.get_capex_fee_by_palancas(tipologia, palancas)
+            if not capex_data['success']:
+                return {
+                    'success': False,
+                    'error': capex_data['error']
+                }
+
+            total_capex_usd = capex_data['total_capex_usd']
+            total_fee_usd = capex_data['total_fee_usd']
+            total_capex_cop = total_capex_usd * exchange_rate
+            total_fee_cop = total_fee_usd * exchange_rate
+
+            # 3. Define vol_inicial based on tamano_tienda and tipologia
+            vol_inicial_mapping = {
+                'Super e hiper': {'Pequeño': 50, 'Mediano': 100, 'Grande': 150},
+                'Conveniencia': {'Pequeño': 20, 'Mediano': 40, 'Grande': 45},
+                'Droguerías': {'Pequeño': 10, 'Mediano': 15, 'Grande': 20}
+            }
+            vol_inicial = vol_inicial_mapping.get(tipologia, {}).get(tamano_tienda, 50)
+
+            # 4. Build feature vector for OLS prediction
+            # Always-on features (execution checks)
+            feature_vector = {
+                'planograma_ejecución_check': 1.0,
+                'precios_check': 1.0,
+                'carga_check': 1.0
+            }
+
+            # User-defined features (from input)
+            feature_vector['q_frentes'] = features.get('frentesPropios', 0)
+            feature_vector['q_frentes_competencia'] = features.get('frentesCompetencia', 0)
+            feature_vector['q_sku'] = features.get('skuPropios', 0)
+            feature_vector['q_sku_competencia'] = features.get('skuCompetencia', 0)
+
+            # EDF features (only for Super e hiper)
+            if tipologia == 'Super e hiper':
+                feature_vector['q_edf_ad'] = features.get('equiposFrioPropios', 0)
+                feature_vector['q_edf_ad_competencia'] = features.get('equiposFrioCompetencia', 0)
+
+            feature_vector['q_cof_puertas'] = features.get('puertasPropias', 0)
+            feature_vector['q_cof_puertas_competencia'] = features.get('puertasCompetencia', 0)
+
+            # Palanca features mapping (name to OLS parameter name)
+            palanca_mapping = {
+                'Exhibición adicional mamut': 'exhibicion_adicional_mamut',
+                'Nevera en punto de pago': 'nevera_en_punto_de_pago',
+                'Entrepaño con comunicación': 'entrepano_con_comunicacion',
+                'Cajero vendedor': 'cajero_vendedor',
+                'Tienda multipalanca': 'tienda_multipalanca',
+                'Punta de góndola': 'punta_de_gondola',
+                'Mini vallas en fachada': 'mini_vallas_en_fachada',
+                'Metro cuadrado': 'metro_cuadrado',
+                'Rompe tráfico cross category': 'rompe_trafico_cross_category'
+            }
+
+            # Initialize all palanca features to 0
+            for param_name in palanca_mapping.values():
+                feature_vector[param_name] = 0.0
+
+            # Activate selected palancas (set to 1)
+            for palanca_name in palancas:
+                param_name = palanca_mapping.get(palanca_name)
+                if param_name:
+                    feature_vector[param_name] = 1.0
+
+            # 5. Calculate prediction with palanca (treatment group)
+            prediction_with_palanca = ols_params.get('Intercept', 0.0)
+            for feature_name, feature_value in feature_vector.items():
+                coef = ols_params.get(feature_name, 0.0)
+                prediction_with_palanca += coef * feature_value
+
+            # 6. Calculate prediction without palanca (control group)
+            # Same features but palancas = 0
+            feature_vector_control = feature_vector.copy()
+            for param_name in palanca_mapping.values():
+                feature_vector_control[param_name] = 0.0
+
+            prediction_control = ols_params.get('Intercept', 0.0)
+            for feature_name, feature_value in feature_vector_control.items():
+                coef = ols_params.get(feature_name, 0.0)
+                prediction_control += coef * feature_value
+
+            # 7. Calculate uplift percentage
+            if prediction_control > 0:
+                uplift_percent = ((prediction_with_palanca - prediction_control) / prediction_control) * 100
+            else:
+                uplift_percent = 0.0
+
+            # 8. Calculate financial metrics
+            # Ganancia incremental = difference in predictions * MACO
+            ganancia_incremental = (prediction_with_palanca - prediction_control) * (maco / 100.0)
+
+            # Payback (months) = CAPEX / (Ganancia incremental - Fee)
+            monthly_profit = ganancia_incremental - total_fee_cop
+            if monthly_profit > 0:
+                payback_months = total_capex_cop / monthly_profit
+            else:
+                payback_months = float('inf')
+
+            # ROI (12 months) = ((Ganancia - Fee) * 12 - CAPEX) / (CAPEX + Fee * 12)
+            annual_profit = ganancia_incremental * 12
+            annual_fee = total_fee_cop * 12
+            denominator = total_capex_cop + annual_fee
+
+            if denominator > 0:
+                roi_12m = (annual_profit - annual_fee - total_capex_cop) / denominator
+            else:
+                roi_12m = 0.0
+
+            return {
+                'success': True,
+                'uplift': round(uplift_percent, 2),
+                'roi': round(roi_12m, 2),
+                'payback': round(payback_months, 1) if payback_months != float('inf') else None,
+                'capex_breakdown': capex_data['breakdown'],
+                'total_capex_usd': total_capex_usd,
+                'total_fee_usd': total_fee_usd,
+                'total_capex_cop': total_capex_cop,
+                'total_fee_cop': total_fee_cop,
+                'prediction_with_palanca': round(prediction_with_palanca, 2),
+                'prediction_control': round(prediction_control, 2),
+                'vol_inicial': vol_inicial,
+                'ganancia_incremental': round(ganancia_incremental, 2)
+            }
+
+        except Exception as e:
+            logger.error(f"Error in calculate_simulation: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
 
 
 # Global instance

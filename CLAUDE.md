@@ -255,10 +255,10 @@ The Analysis area now features a unified "Simulaciones" section replacing the pr
 ### Data Layer
 - **PostgreSQL Database**: Unified data source for both Dashboard and Chatbot
 - **225 stores** with A/B testing data across multiple cities
-- **11 master tables + 2 fact tables**: Normalized schema for scalability
+- **11 master tables + 3 OLS params tables + 2 fact tables**: Normalized schema for scalability
 - **Text-to-SQL**: Natural language queries executed on PostgreSQL
 - **Real-time analytics**: Cache performance and session metrics
-- **40,550+ records**: Including experiments, stores, periods, categories, and audits
+- **1,085,078+ records**: Including 1M+ simulation results, experiments, stores, periods, audits, and OLS model coefficients
 
 ## Development Workflow
 
@@ -435,7 +435,12 @@ The chatbot interface has been significantly improved for better user experience
   - `data_source_master`: Data sources (Sell In, Sell Out, Sell Out - SOM, etc.)
   - `period_master`: Time periods with start/end dates
   - `store_master`: 225 stores with city, typology, and lever assignments
-  - `audit_master`: 2,082 audit records tracking store visits by week (172 unique stores, 10 weeks)
+  - `audit_master`: 2,082 audit records tracking store visits (columns: week, date, hour, store_code_sellin)
+
+- **3 OLS Model Parameter Tables** (for simulations):
+  - `ols_params_drogas`: 16 coefficients for Droguerías typology OLS model
+  - `ols_params_conveniencia`: 15 coefficients for Conveniencia typology OLS model
+  - `ols_params_super_hiper`: 17 coefficients for Super e hiper typology OLS model
 
 - **2 Fact Tables**:
   - `ab_test_result`: 37,840 rows - Detailed A/B test results by store/period
@@ -449,14 +454,40 @@ The chatbot interface has been significantly improved for better user experience
 - **Indexes**: Optimized for both Dashboard queries and Chatbot text-to-SQL
 - **Auto-triggers**: `updated_at` columns automatically maintained on UPDATE
 
-### Data Migration
+### Data Migration & Updates
+
+**Workflow when updating data from Excel/Parquet:**
+
 ```bash
-# Migrate data from Excel to PostgreSQL
+# 1. Update PostgreSQL database from Excel + Parquet (local development)
+docker exec -e DB_HOST=db gatorade_backend python scripts/migrate_excel_to_postgres.py --truncate
+
+# 2. Generate updated SQL dump for Cloud Run deployment
+docker exec gatorade_postgres pg_dump -U gatorade_user -d gatorade_ab_testing --clean --if-exists > backend/database/init_complete.sql
+
+# 3. Verify dump size
+ls -lh backend/database/init_complete.sql
+
+# 4. Deploy to Cloud Run (automatically uses new dump)
+./deploy-backend-cloudrun.sh
+```
+
+**Migration commands:**
+```bash
+# Migrate all data with truncate
 python backend/scripts/migrate_excel_to_postgres.py --truncate
 
-# Validate migration
+# Validate existing data only
 python backend/scripts/migrate_excel_to_postgres.py --validate-only
+
+# Custom parquet file
+python backend/scripts/migrate_excel_to_postgres.py --truncate --parquet custom_file.parquet
 ```
+
+**Important notes:**
+- **`migrate_excel_to_postgres.py`**: Loads data from Excel/Parquet into PostgreSQL (development tool)
+- **`pg_dump`**: Generates SQL dump for Cloud Run deployment (uses PostgreSQL COPY format, much faster than INSERT)
+- **`init_complete.sql`**: Complete database snapshot used by Cloud Run (127 MB, 1.08M+ lines, 1.08M+ records)
 
 ### Database Access
 ```bash
@@ -526,7 +557,7 @@ PORT=8080
 **Self-Contained Backend with Embedded PostgreSQL:**
 - Backend container includes PostgreSQL server running on `localhost:5432`
 - Database initialized automatically on container startup with full UTF-8 encoding
-- 3.1 MB SQL dump with schema + 38,470+ rows loaded at startup
+- **127 MB SQL dump** with schema + **1.08M+ rows** loaded at startup
 - Ideal for static A/B testing data (no external Cloud SQL needed = $0 cost)
 - Container restarts reload data from dump (stateless design)
 
@@ -605,7 +636,7 @@ ls -lh backend/database/init_complete.sql
 ### Key Files for Cloud Run:
 - **`backend/Dockerfile.cloudrun`** - Multi-stage Dockerfile with PostgreSQL
 - **`backend/docker-entrypoint.sh`** - Initialization script (PostgreSQL + Flask)
-- **`backend/database/init_complete.sql`** - Complete database dump (3.1 MB)
+- **`backend/database/init_complete.sql`** - Complete database dump (127 MB, 1.08M+ records)
 - **`backend/.gcloudignore`** - Excludes unnecessary files from build
 
 ### Troubleshooting:
@@ -627,26 +658,45 @@ gcloud run logs tail retail-backend --region=us-central1 | grep -i "utf\|ascii\|
 
 ## Recent Updates
 
-### 2025-10-15: New Audit Master Table
+### 2025-10-16: OLS Model Parameters & Audit Master Restructure
 **Database Schema Update:**
-- **New Table**: `audit_master` added to track store audit visits
-  - **2,082 audit records** across 172 unique stores
-  - **10 weeks** of audit data (Ruta SEMANA 1 through 10)
-  - **Tracks**: Store code (cod_pdv), week, date, hour, and typology
-  - **Date Range**: 6/10/2025 to 8/9/2025
+- **Updated Table**: `audit_master` restructured for better data integrity
+  - Removed `typology_id` and `cod_pdv` columns (old structure)
+  - Now uses `store_code_sellin` to link directly with `store_master`
+  - **2,082 audit records** with simplified structure: week, date, hour, store_code_sellin
+  - Source data from `app_db_20251016_1007.xlsx` (audit_master sheet)
+
+- **New Tables**: 3 OLS model parameter tables for simulation calculations
+  - **`ols_params_drogas`**: 16 coefficients for Droguerías typology (Intercept, cajero_vendedor, entrepano_con_comunicacion, nevera_en_punto_de_pago, etc.)
+  - **`ols_params_conveniencia`**: 15 coefficients for Conveniencia typology (Intercept, cajero_vendedor, mini_vallas_en_fachada, punta_de_gondola, etc.)
+  - **`ols_params_super_hiper`**: 17 coefficients for Super e hiper typology (Intercept, metro_cuadrado, nevera_en_punto_de_pago, punta_de_gondola, rompe_trafico_cross_category, etc.)
+  - Each table contains feature names and their corresponding OLS regression coefficients
+  - Sourced from `df_drg_params.xlsx`, `df_cnv_params.xlsx`, `df_seh_params.xlsx`
+
 - **Schema Updates**:
-  - Updated `backend/database/schema.sql` with new table definition
-  - Added indexes on `cod_pdv`, `week`, and `typology_id`
-  - Added auto-update trigger for `updated_at` column
-- **Migration Script**: Updated `migrate_excel_to_postgres.py` to include `audit_master` from Excel sheet
-- **Database Dump**: Regenerated `init_complete.sql` (127 MB, 1,087,085 lines)
-- **Total Records**: Now 40,550+ records across all tables (previously 38,470+)
+  - Updated `backend/database/schema.sql` with restructured `audit_master` and 3 OLS params tables
+  - Added indexes on `store_code_sellin` (audit_master) and `feature` (OLS params tables)
+  - Added auto-update triggers for all new/modified tables
+
+- **Migration Script**: Enhanced to support independent Excel files
+  - Updated `migrate_excel_to_postgres.py` to load 3 separate OLS params Excel files
+  - Changed main Excel file from `app_db_20251015_1926.xlsx` to `app_db_20251016_1007.xlsx`
+  - New method `read_excel_file()` for loading single-sheet Excel files
+
+- **Docker Compose**: Updated volume mounts
+  - Added mounts for `df_drg_params.xlsx`, `df_cnv_params.xlsx`, `df_seh_params.xlsx`
+  - Updated main Excel file mount to `app_db_20251016_1007.xlsx`
+
+- **Total Records**: Now **1,085,078+ records** (2,082 audit + 48 OLS coefficients + 1,044,480 simulation results + 38,468 other records)
+
+**Use Case:**
+These OLS parameter tables will be used by the SimulationPersonalizada component to calculate real uplift predictions based on the actual regression model coefficients for each typology.
 
 **Files Modified:**
-- `backend/database/schema.sql`: Added audit_master table with full schema
-- `backend/scripts/migrate_excel_to_postgres.py`: Updated to process audit_master from app_db_20251015_1926.xlsx
-- `backend/database/init_complete.sql`: Regenerated with audit_master data
-- `CLAUDE.md`: Updated documentation to reflect 11 master tables
+- `backend/database/schema.sql`: Restructured audit_master, added 3 OLS params tables
+- `backend/scripts/migrate_excel_to_postgres.py`: Enhanced to load OLS params from separate files
+- `docker-compose.postgres.yml`: Added volume mounts for params Excel files
+- `CLAUDE.md`: Updated documentation to reflect 14 master tables (11 + 3 OLS params)
 
 ### 2025-10-13: Interactive Simulaciones Section
 **New Feature - Custom Palanca Calculator:**

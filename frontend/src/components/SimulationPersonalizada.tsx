@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -6,7 +6,7 @@ import { Label } from './ui/label';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Checkbox } from './ui/checkbox';
 import { Badge } from './ui/badge';
-import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip';
 import {
   ChevronLeft,
   ChevronRight,
@@ -20,8 +20,10 @@ import {
   Grid3x3,
   Wallet,
   Brain,
-  Info
+  Info,
+  AlertCircle
 } from 'lucide-react';
+import { apiService } from '../services/api';
 
 // Tipos
 type Tipologia = 'Super e hiper' | 'Conveniencia' | 'Droguerías' | '';
@@ -43,8 +45,16 @@ interface FormData {
     puertasPropias: number;
     puertasCompetencia: number;
   };
-  inversion: number;
+  exchangeRate: number;
   maco: number;
+}
+
+interface CapexBreakdown {
+  palanca: string;
+  capex_usd: number;
+  fee_usd: number;
+  capex_cop: number;
+  fee_cop: number;
 }
 
 interface Results {
@@ -53,17 +63,31 @@ interface Results {
   payback: number;
 }
 
-// Datos ficticios
+// Datos
 const TIPOLOGIAS: Tipologia[] = ['Super e hiper', 'Conveniencia', 'Droguerías'];
-const PALANCAS = [
-  'Punta de góndola',
-  'Metro cuadrado',
-  'Isla',
-  'Cooler',
-  'Nevera vertical',
-  'Activación en tienda',
-  'Material POP'
-];
+
+// Store size descriptions by tipologia (for tooltips)
+const STORE_SIZE_DESCRIPTIONS: Record<Tipologia, Record<TamanoTienda, string>> = {
+  'Super e hiper': {
+    'Pequeño': 'PDV con ventas mensuales entre 0-50 cajas',
+    'Mediano': 'PDV con ventas mensuales entre 51-100 cajas',
+    'Grande': 'PDV con ventas mensuales mayores a 100 cajas',
+    '': ''
+  },
+  'Conveniencia': {
+    'Pequeño': 'PDV con ventas mensuales entre 0-20 cajas',
+    'Mediano': 'PDV con ventas mensuales entre 21-40 cajas',
+    'Grande': 'PDV con ventas mensuales mayores a 40 cajas',
+    '': ''
+  },
+  'Droguerías': {
+    'Pequeño': 'PDV con ventas mensuales entre 0-10 cajas',
+    'Mediano': 'PDV con ventas mensuales entre 11-15 cajas',
+    'Grande': 'PDV con ventas mensuales mayores a 15 cajas',
+    '': ''
+  },
+  '': { 'Pequeño': '', 'Mediano': '', 'Grande': '', '': '' }
+};
 
 // Rangos observados por tipología y tamaño (para tooltips)
 const FEATURE_RANGES: Record<string, Record<string, string>> = {
@@ -97,17 +121,29 @@ const FEATURE_RANGES: Record<string, Record<string, string>> = {
     equipos: '1 equipo',
     puertas: '1-2 puertas'
   },
-  'Droguerías_Mediano': {
-    frentes: '3-5 frentes',
-    skus: '10-14 SKUs',
-    equipos: '1-2 equipos',
-    puertas: '2-3 puertas'
+  'Conveniencia_Grande': {
+    frentes: '5-8 frentes',
+    skus: '12-18 SKUs',
+    equipos: '2-3 equipos',
+    puertas: '3-4 puertas'
   },
   'Droguerías_Pequeño': {
     frentes: '2-4 frentes',
     skus: '6-10 SKUs',
     equipos: '1 equipo',
     puertas: '1-2 puertas'
+  },
+  'Droguerías_Mediano': {
+    frentes: '3-5 frentes',
+    skus: '10-14 SKUs',
+    equipos: '1-2 equipos',
+    puertas: '2-3 puertas'
+  },
+  'Droguerías_Grande': {
+    frentes: '5-8 frentes',
+    skus: '14-20 SKUs',
+    equipos: '2-3 equipos',
+    puertas: '3-5 puertas'
   }
 };
 
@@ -161,6 +197,14 @@ export function SimulationPersonalizada() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [calculationProgress, setCalculationProgress] = useState(0);
   const [calculationMessage, setCalculationMessage] = useState('');
+  const [availablePalancas, setAvailablePalancas] = useState<string[]>([]);
+  const [loadingPalancas, setLoadingPalancas] = useState(false);
+  const [capexBreakdown, setCapexBreakdown] = useState<CapexBreakdown[]>([]);
+  const [loadingCapex, setLoadingCapex] = useState(false);
+  const [totalCapexUsd, setTotalCapexUsd] = useState<number>(0);
+  const [totalFeeUsd, setTotalFeeUsd] = useState<number>(0);
+  const [error, setError] = useState<string>('');
+
   const [formData, setFormData] = useState<FormData>({
     tipologia: '',
     tipoPalanca: '',
@@ -176,7 +220,7 @@ export function SimulationPersonalizada() {
       puertasPropias: 2,
       puertasCompetencia: 3
     },
-    inversion: 50000000,
+    exchangeRate: 3912, // Default TRM
     maco: 35
   });
   const [results, setResults] = useState<Results>({
@@ -184,6 +228,58 @@ export function SimulationPersonalizada() {
     roi: 0,
     payback: 0
   });
+
+  // Load palancas when tipologia changes
+  useEffect(() => {
+    if (formData.tipologia) {
+      loadPalancas();
+    }
+  }, [formData.tipologia]);
+
+  // Load CAPEX/Fee when user reaches Step 6
+  useEffect(() => {
+    if (currentStep === 6 && formData.tipologia && formData.palancasSeleccionadas.length > 0) {
+      loadCapexFee();
+    }
+  }, [currentStep, formData.tipologia, formData.palancasSeleccionadas]);
+
+  const loadPalancas = async () => {
+    if (!formData.tipologia) return;
+
+    setLoadingPalancas(true);
+    try {
+      const response = await apiService.getPalancasByTipologia(formData.tipologia);
+      if (response.success) {
+        setAvailablePalancas(response.palancas);
+      } else {
+        setError('Error al cargar palancas');
+      }
+    } catch (err) {
+      console.error('Error loading palancas:', err);
+      setError('Error al cargar palancas');
+    } finally {
+      setLoadingPalancas(false);
+    }
+  };
+
+  const loadCapexFee = async () => {
+    if (!formData.tipologia || formData.palancasSeleccionadas.length === 0) return;
+
+    setLoadingCapex(true);
+    try {
+      const response = await apiService.getCapexFee(formData.tipologia, formData.palancasSeleccionadas);
+      if (response.success) {
+        setTotalCapexUsd(response.total_capex_usd);
+        setTotalFeeUsd(response.total_fee_usd);
+      } else {
+        console.error('Error al cargar CAPEX/Fee');
+      }
+    } catch (err) {
+      console.error('Error loading CAPEX/Fee:', err);
+    } finally {
+      setLoadingCapex(false);
+    }
+  };
 
   // Generar breadcrumb items basado en el estado actual
   const getBreadcrumbItems = (): BreadcrumbItem[] => {
@@ -262,8 +358,9 @@ export function SimulationPersonalizada() {
 
   // Validaciones
   const isTamanoDisabled = (tamano: TamanoTienda): boolean => {
-    if (formData.tipoPalanca === 'multiple' && tamano === 'Pequeño') return true;
-    if (formData.tipologia === 'Droguerías' && tamano === 'Grande') return true;
+    // Pequeño NO disponible cuando hay múltiples palancas seleccionadas (en cualquier tipología)
+    if (formData.palancasSeleccionadas.length > 1 && tamano === 'Pequeño') return true;
+
     return false;
   };
 
@@ -281,24 +378,26 @@ export function SimulationPersonalizada() {
       case 4: // Tamaño
         return formData.tamanoTienda !== '';
       case 5: // Features
-      case 6: // Financieros
         return true;
+      case 6: // Financieros
+        return formData.exchangeRate > 0; // Validate exchange rate is not empty
       default:
         return true;
     }
   };
 
-  // Cálculo completo: Uplift, ROI y Payback
+  // Cálculo completo: Uplift, ROI y Payback con API real
   const calculateResults = async () => {
     setIsCalculating(true);
     setCalculationProgress(0);
+    setError('');
     setCurrentStep(7); // Ir a pantalla de resultados (Paso 7)
 
     // Simular progreso con mensajes dinámicos
     const steps = [
-      { progress: 33, message: 'Analizando features...', delay: 800 },
-      { progress: 66, message: 'Ejecutando modelo OLS...', delay: 900 },
-      { progress: 100, message: 'Calculando resultados...', delay: 800 }
+      { progress: 33, message: 'Analizando features...', delay: 500 },
+      { progress: 66, message: 'Ejecutando modelo OLS...', delay: 600 },
+      { progress: 100, message: 'Calculando resultados...', delay: 500 }
     ];
 
     for (const step of steps) {
@@ -307,30 +406,44 @@ export function SimulationPersonalizada() {
       setCalculationMessage(step.message);
     }
 
-    // Fórmula mock simplificada para Uplift
-    const featuresScore =
-      formData.features.frentesPropios * 0.8 +
-      formData.features.skuPropios * 0.5 +
-      formData.features.equiposFrioPropios * 1.2 +
-      formData.features.puertasPropias * 1.0 -
-      (formData.features.frentesCompetencia * 0.4) -
-      (formData.features.skuCompetencia * 0.3);
+    try {
+      // Call real API
+      const response = await apiService.calculateSimulation({
+        tipologia: formData.tipologia,
+        palancas: formData.palancasSeleccionadas,
+        tamanoTienda: formData.tamanoTienda,
+        features: formData.features,
+        maco: formData.maco,
+        exchangeRate: formData.exchangeRate
+      });
 
-    const uplift = Math.max(5, Math.min(35, 12 + (featuresScore * 0.15)));
+      if (response.success) {
+        setResults({
+          uplift: response.uplift,
+          roi: response.roi,
+          payback: response.payback || 0
+        });
 
-    // Fórmulas mock para ROI y Payback
-    const ventasEstimadas = formData.inversion * (uplift / 100);
-    const ganancia = ventasEstimadas * (formData.maco / 100);
-    const roi = ganancia / formData.inversion;
-    const payback = roi > 0 ? 12 / roi : 0;
-
-    setResults({
-      uplift: parseFloat(uplift.toFixed(1)),
-      roi: parseFloat(roi.toFixed(2)),
-      payback: parseFloat(payback.toFixed(1))
-    });
-
-    setIsCalculating(false);
+        // Build capex breakdown with COP conversion
+        const breakdown = response.capex_breakdown.map(item => ({
+          palanca: item.palanca,
+          capex_usd: item.capex_usd,
+          fee_usd: item.fee_usd,
+          capex_cop: item.capex_usd * formData.exchangeRate,
+          fee_cop: item.fee_usd * formData.exchangeRate
+        }));
+        setCapexBreakdown(breakdown);
+      } else {
+        setError(response.error || 'Error al calcular simulación');
+        setResults({ uplift: 0, roi: 0, payback: 0 });
+      }
+    } catch (err) {
+      console.error('Error calculating simulation:', err);
+      setError('Error al calcular simulación');
+      setResults({ uplift: 0, roi: 0, payback: 0 });
+    } finally {
+      setIsCalculating(false);
+    }
   };
 
   const handleNext = () => {
@@ -355,6 +468,8 @@ export function SimulationPersonalizada() {
   const handleNewSimulation = () => {
     setCurrentStep(1);
     setIsCalculating(false);
+    setError('');
+    setCapexBreakdown([]);
     setFormData({
       tipologia: '',
       tipoPalanca: '',
@@ -370,7 +485,7 @@ export function SimulationPersonalizada() {
         puertasPropias: 2,
         puertasCompetencia: 3
       },
-      inversion: 50000000,
+      exchangeRate: 3912,
       maco: 35
     });
     setResults({ uplift: 0, roi: 0, payback: 0 });
@@ -404,9 +519,10 @@ export function SimulationPersonalizada() {
   };
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Breadcrumb superior */}
-      <SelectionBreadcrumb items={getBreadcrumbItems()} onItemClick={handleBreadcrumbClick} />
+    <TooltipProvider>
+      <div className="h-full flex flex-col">
+        {/* Breadcrumb superior */}
+        <SelectionBreadcrumb items={getBreadcrumbItems()} onItemClick={handleBreadcrumbClick} />
 
       {/* Content area */}
       <div className="flex-1 overflow-hidden p-6">
@@ -500,25 +616,35 @@ export function SimulationPersonalizada() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 gap-2">
-                      {PALANCAS.map((palanca) => (
-                        <div
-                          key={palanca}
-                          className={`flex items-center space-x-2 p-2 border rounded-lg cursor-pointer transition-colors text-sm ${
-                            formData.palancasSeleccionadas.includes(palanca)
-                              ? 'border-primary bg-primary/5'
-                              : 'border-border hover:bg-muted/50'
-                          }`}
-                          onClick={() => togglePalanca(palanca)}
-                        >
-                          <Checkbox
-                            checked={formData.palancasSeleccionadas.includes(palanca)}
-                            onCheckedChange={() => togglePalanca(palanca)}
-                          />
-                          <Label className="flex-1 cursor-pointer text-sm">{palanca}</Label>
-                        </div>
-                      ))}
-                    </div>
+                    {loadingPalancas ? (
+                      <div className="flex items-center justify-center p-8">
+                        <div className="text-sm text-muted-foreground">Cargando palancas...</div>
+                      </div>
+                    ) : availablePalancas.length === 0 ? (
+                      <div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
+                        No hay palancas disponibles para esta tipología
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        {availablePalancas.map((palanca) => (
+                          <div
+                            key={palanca}
+                            className={`flex items-center space-x-2 p-2 border rounded-lg cursor-pointer transition-colors text-sm ${
+                              formData.palancasSeleccionadas.includes(palanca)
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border hover:bg-muted/50'
+                            }`}
+                            onClick={() => togglePalanca(palanca)}
+                          >
+                            <Checkbox
+                              checked={formData.palancasSeleccionadas.includes(palanca)}
+                              onCheckedChange={() => togglePalanca(palanca)}
+                            />
+                            <Label className="flex-1 cursor-pointer text-sm">{palanca}</Label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
               </Card>
             </div>
@@ -542,27 +668,34 @@ export function SimulationPersonalizada() {
                     <div className="space-y-3">
                       {(['Pequeño', 'Mediano', 'Grande'] as TamanoTienda[]).map((tamano) => {
                         const disabled = isTamanoDisabled(tamano);
+                        const description = formData.tipologia ? STORE_SIZE_DESCRIPTIONS[formData.tipologia][tamano] : '';
+
                         return (
-                          <Label
-                            key={tamano}
-                            htmlFor={`tam-${tamano}`}
-                            className={`flex items-center space-x-3 p-5 border rounded-lg transition-colors ${
-                              disabled
-                                ? 'opacity-50 cursor-not-allowed bg-muted/30'
-                                : 'border-border hover:bg-muted/50 cursor-pointer'
-                            }`}
-                          >
-                            <RadioGroupItem value={tamano} id={`tam-${tamano}`} disabled={disabled} />
-                            <div className="flex-1">
-                              <div className="font-medium">{tamano}</div>
-                              {disabled && (
-                                <div className="text-xs text-muted-foreground mt-1">
-                                  {tamano === 'Pequeño' && 'No disponible para palancas múltiples'}
-                                  {tamano === 'Grande' && 'No disponible para Droguerías'}
-                                </div>
-                              )}
-                            </div>
-                          </Label>
+                          <Tooltip key={tamano}>
+                            <TooltipTrigger asChild>
+                              <div
+                                className={`flex items-center space-x-3 p-5 border rounded-lg transition-colors ${
+                                  disabled
+                                    ? 'opacity-50 cursor-not-allowed bg-muted/30'
+                                    : 'border-border hover:bg-muted/50 cursor-pointer'
+                                }`}
+                                onClick={() => !disabled && setFormData({ ...formData, tamanoTienda: tamano })}
+                              >
+                                <RadioGroupItem value={tamano} id={`tam-${tamano}`} disabled={disabled} />
+                                <Label htmlFor={`tam-${tamano}`} className="flex-1 cursor-pointer">
+                                  <div className="font-medium">{tamano}</div>
+                                  {disabled && tamano === 'Pequeño' && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      No disponible para múltiples palancas
+                                    </div>
+                                  )}
+                                </Label>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">{description}</p>
+                            </TooltipContent>
+                          </Tooltip>
                         );
                       })}
                     </div>
@@ -602,11 +735,11 @@ export function SimulationPersonalizada() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {/* Frentes de góndola */}
+                        {/* Cantidad de frentes */}
                         <tr className="hover:bg-muted/30 transition-colors">
                           <td className="p-3">
                             <div className="flex items-center space-x-2">
-                              <span className="font-medium text-sm">Frentes de góndola</span>
+                              <span className="font-medium text-sm">Cantidad de frentes</span>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <button className="text-muted-foreground hover:text-foreground transition-colors">
@@ -643,11 +776,11 @@ export function SimulationPersonalizada() {
                           </td>
                         </tr>
 
-                        {/* SKUs disponibles */}
+                        {/* Cantidad de SKU's */}
                         <tr className="hover:bg-muted/30 transition-colors">
                           <td className="p-3">
                             <div className="flex items-center space-x-2">
-                              <span className="font-medium text-sm">SKUs disponibles</span>
+                              <span className="font-medium text-sm">Cantidad de SKU's</span>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <button className="text-muted-foreground hover:text-foreground transition-colors">
@@ -684,52 +817,54 @@ export function SimulationPersonalizada() {
                           </td>
                         </tr>
 
-                        {/* Equipos de frío */}
-                        <tr className="hover:bg-muted/30 transition-colors">
-                          <td className="p-3">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-medium text-sm">Equipos de frío</span>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button className="text-muted-foreground hover:text-foreground transition-colors">
-                                    <Info className="w-3.5 h-3.5" />
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="text-xs">Rango observado: {FEATURE_RANGES[`${formData.tipologia}_${formData.tamanoTienda}`]?.equipos || 'N/A'}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <Input
-                              type="number"
-                              value={formData.features.equiposFrioPropios}
-                              onChange={(e) => setFormData({
-                                ...formData,
-                                features: { ...formData.features, equiposFrioPropios: parseInt(e.target.value) || 0 }
-                              })}
-                              className="w-24 text-center mx-auto"
-                            />
-                          </td>
-                          <td className="p-3">
-                            <Input
-                              type="number"
-                              value={formData.features.equiposFrioCompetencia}
-                              onChange={(e) => setFormData({
-                                ...formData,
-                                features: { ...formData.features, equiposFrioCompetencia: parseInt(e.target.value) || 0 }
-                              })}
-                              className="w-24 text-center mx-auto"
-                            />
-                          </td>
-                        </tr>
+                        {/* EDF's adicionales - ONLY for Super e hiper */}
+                        {formData.tipologia === 'Super e hiper' && (
+                          <tr className="hover:bg-muted/30 transition-colors">
+                            <td className="p-3">
+                              <div className="flex items-center space-x-2">
+                                <span className="font-medium text-sm">EDF's adicionales</span>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button className="text-muted-foreground hover:text-foreground transition-colors">
+                                      <Info className="w-3.5 h-3.5" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-xs">Rango observado: {FEATURE_RANGES[`${formData.tipologia}_${formData.tamanoTienda}`]?.equipos || 'N/A'}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <Input
+                                type="number"
+                                value={formData.features.equiposFrioPropios}
+                                onChange={(e) => setFormData({
+                                  ...formData,
+                                  features: { ...formData.features, equiposFrioPropios: parseInt(e.target.value) || 0 }
+                                })}
+                                className="w-24 text-center mx-auto"
+                              />
+                            </td>
+                            <td className="p-3">
+                              <Input
+                                type="number"
+                                value={formData.features.equiposFrioCompetencia}
+                                onChange={(e) => setFormData({
+                                  ...formData,
+                                  features: { ...formData.features, equiposFrioCompetencia: parseInt(e.target.value) || 0 }
+                                })}
+                                className="w-24 text-center mx-auto"
+                              />
+                            </td>
+                          </tr>
+                        )}
 
-                        {/* Puertas de refrigerador */}
+                        {/* Cantidad puertas COF */}
                         <tr className="hover:bg-muted/30 transition-colors">
                           <td className="p-3">
                             <div className="flex items-center space-x-2">
-                              <span className="font-medium text-sm">Puertas de refrigerador</span>
+                              <span className="font-medium text-sm">Cantidad puertas COF</span>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <button className="text-muted-foreground hover:text-foreground transition-colors">
@@ -783,35 +918,78 @@ export function SimulationPersonalizada() {
                     <span>Parámetros financieros</span>
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Define la inversión y el margen de contribución
+                    Inversión y márgenes
                   </p>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-6">
+                    {/* CAPEX and Fee in USD */}
                     <div className="space-y-4 p-4 border border-border rounded-lg bg-muted/20">
-                      <div>
-                        <Label className="text-sm text-muted-foreground mb-2 block">Inversión Total (COP)</Label>
-                        <Input
-                          type="number"
-                          value={formData.inversion}
-                          onChange={(e) => setFormData({ ...formData, inversion: parseInt(e.target.value) || 0 })}
-                          className="w-full"
-                          placeholder="50000000"
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Monto total a invertir en la palanca
-                        </p>
-                      </div>
+                      <h4 className="text-sm font-semibold mb-3">Inversión</h4>
+
+                      {loadingCapex ? (
+                        <div className="flex items-center justify-center py-4">
+                          <div className="text-sm text-muted-foreground">Cargando costos...</div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label className="text-xs text-muted-foreground mb-2 block">CAPEX (USD)</Label>
+                              <div className="text-lg font-semibold">
+                                ${totalCapexUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground mb-2 block">Fee (USD)</Label>
+                              <div className="text-lg font-semibold">
+                                ${totalFeeUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="border-t border-border pt-3 mt-3">
+                            <Label className="text-xs text-muted-foreground mb-2 block">Tipo de Cambio (TRM)</Label>
+                            <Input
+                              type="number"
+                              value={formData.exchangeRate || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setFormData({ ...formData, exchangeRate: value === '' ? 0 : parseFloat(value) });
+                              }}
+                              className="w-full"
+                              placeholder="3912"
+                              step="0.01"
+                            />
+                          </div>
+
+                          <div className="border-t border-border pt-3 mt-3">
+                            <Label className="text-xs text-muted-foreground mb-2 block">Total en COP</Label>
+                            <div className="text-2xl font-bold text-primary">
+                              ${((totalCapexUsd + totalFeeUsd) * formData.exchangeRate).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} COP
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              CAPEX: ${(totalCapexUsd * formData.exchangeRate).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} +
+                              Fee: ${(totalFeeUsd * formData.exchangeRate).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* MACO */}
+                    <div className="space-y-4 p-4 border border-border rounded-lg bg-muted/20">
                       <div>
                         <Label className="text-sm text-muted-foreground mb-2 block">MACO (%)</Label>
                         <Input
                           type="number"
                           value={formData.maco}
-                          onChange={(e) => setFormData({ ...formData, maco: parseInt(e.target.value) || 0 })}
+                          onChange={(e) => setFormData({ ...formData, maco: parseFloat(e.target.value) || 0 })}
                           className="w-full"
                           placeholder="35"
                           min="0"
                           max="100"
+                          step="0.1"
                         />
                         <p className="text-xs text-muted-foreground mt-1">
                           Margen de contribución sobre ventas
@@ -825,118 +1003,100 @@ export function SimulationPersonalizada() {
           )}
 
           {/* Paso 7: Resultados */}
-          {currentStep === 7 && results.uplift > 0 && (
-            <div className="animate-in fade-in duration-500 w-full max-w-3xl">
+          {currentStep === 7 && (
+            <div className="animate-in fade-in duration-500 w-full max-w-2xl">
               <Card className="border-2 border-primary/20">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2 text-lg">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  <span>Resultados de la Simulación</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Tabla de resultados */}
-                <div className="border border-border rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="text-left p-3 text-sm font-semibold">Métrica</th>
-                        <th className="text-center p-3 text-sm font-semibold">Valor</th>
-                        <th className="text-left p-3 text-sm font-semibold">Descripción</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      <tr className="hover:bg-muted/30 transition-colors">
-                        <td className="p-3">
-                          <div className="flex items-center space-x-2">
-                            <TrendingUp className="w-4 h-4 text-green-600" />
-                            <span className="font-medium">Uplift</span>
-                          </div>
-                        </td>
-                        <td className="p-3 text-center">
-                          <span className="text-lg font-bold text-green-600">+{results.uplift}%</span>
-                        </td>
-                        <td className="p-3 text-sm text-muted-foreground">
-                          Incremento estimado en ventas
-                        </td>
-                      </tr>
-                      <tr className="hover:bg-muted/30 transition-colors">
-                        <td className="p-3">
-                          <div className="flex items-center space-x-2">
-                            <DollarSign className="w-4 h-4 text-primary" />
-                            <span className="font-medium">ROI</span>
-                          </div>
-                        </td>
-                        <td className="p-3 text-center">
-                          <span className="text-lg font-bold text-primary">{results.roi.toFixed(2)}</span>
-                        </td>
-                        <td className="p-3 text-sm text-muted-foreground">
-                          Retorno por cada $1 invertido
-                        </td>
-                      </tr>
-                      <tr className="hover:bg-muted/30 transition-colors">
-                        <td className="p-3">
-                          <div className="flex items-center space-x-2">
-                            <Calendar className="w-4 h-4 text-orange-600" />
-                            <span className="font-medium">Payback</span>
-                          </div>
-                        </td>
-                        <td className="p-3 text-center">
-                          <span className="text-lg font-bold text-orange-600">{results.payback.toFixed(1)}</span>
-                        </td>
-                        <td className="p-3 text-sm text-muted-foreground">
-                          Meses para recuperar inversión
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2 text-lg">
+                    <TrendingUp className="w-5 h-5 text-primary" />
+                    <span>Resultados de la Simulación</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Error Message */}
+                  {error && (
+                    <div className="flex items-start space-x-2 p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
+                      <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-red-800 dark:text-red-200">Error al calcular simulación</p>
+                        <p className="text-xs text-red-700 dark:text-red-300 mt-1">{error}</p>
+                      </div>
+                    </div>
+                  )}
 
-                {/* Resumen compacto */}
-                <div className="bg-muted/30 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold mb-3">Resumen</h4>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Tipología:</span>
-                      <span className="font-medium">{formData.tipologia}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Tamaño:</span>
-                      <span className="font-medium">{formData.tamanoTienda}</span>
-                    </div>
-                    <div className="flex justify-between col-span-2">
-                      <span className="text-muted-foreground">Palancas:</span>
-                      <span className="font-medium">{formData.palancasSeleccionadas.join(', ')}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Inversión:</span>
-                      <span className="font-medium">${formData.inversion.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">MACO:</span>
-                      <span className="font-medium">{formData.maco}%</span>
-                    </div>
-                  </div>
-                </div>
+                  {/* Results - only show if no error and uplift > 0 */}
+                  {!error && results.uplift > 0 && (
+                    <>
+                      {/* Tabla de resultados compacta */}
+                      <div className="border border-border rounded-lg overflow-hidden">
+                        <table className="w-full">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="text-left p-3 text-sm font-semibold">Métrica</th>
+                              <th className="text-center p-3 text-sm font-semibold">Valor</th>
+                              <th className="text-left p-3 text-sm font-semibold">Descripción</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            <tr className="hover:bg-muted/30 transition-colors">
+                              <td className="p-3">
+                                <div className="flex items-center space-x-2">
+                                  <TrendingUp className="w-4 h-4 text-green-600" />
+                                  <span className="font-medium">Uplift</span>
+                                </div>
+                              </td>
+                              <td className="p-3 text-center">
+                                <span className="text-lg font-bold text-green-600">+{results.uplift.toFixed(1)}%</span>
+                              </td>
+                              <td className="p-3 text-sm text-muted-foreground">
+                                Incremento estimado en ventas
+                              </td>
+                            </tr>
+                            <tr className="hover:bg-muted/30 transition-colors">
+                              <td className="p-3">
+                                <div className="flex items-center space-x-2">
+                                  <DollarSign className="w-4 h-4 text-primary" />
+                                  <span className="font-medium">ROI (12 meses)</span>
+                                </div>
+                              </td>
+                              <td className="p-3 text-center">
+                                <span className="text-lg font-bold text-primary">{(results.roi * 100).toFixed(1)}%</span>
+                              </td>
+                              <td className="p-3 text-sm text-muted-foreground">
+                                Retorno sobre inversión anual
+                              </td>
+                            </tr>
+                            <tr className="hover:bg-muted/30 transition-colors">
+                              <td className="p-3">
+                                <div className="flex items-center space-x-2">
+                                  <Calendar className="w-4 h-4 text-orange-600" />
+                                  <span className="font-medium">Payback</span>
+                                </div>
+                              </td>
+                              <td className="p-3 text-center">
+                                <span className="text-lg font-bold text-orange-600">
+                                  {results.payback > 0 ? `${results.payback.toFixed(1)} meses` : 'N/A'}
+                                </span>
+                              </td>
+                              <td className="p-3 text-sm text-muted-foreground">
+                                Meses para recuperar inversión
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
 
-                {/* Botones de acción */}
-                <div className="grid grid-cols-2 gap-4">
+                  {/* Nueva Simulación button */}
                   <Button
-                    variant="outline"
                     onClick={handleNewSimulation}
                     className="w-full"
                   >
                     Nueva Simulación
                   </Button>
-                  <Button
-                    className="w-full"
-                    disabled
-                  >
-                    Guardar Simulación
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
             </div>
           )}
         </div>
@@ -1000,6 +1160,7 @@ export function SimulationPersonalizada() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

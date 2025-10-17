@@ -1,0 +1,6 @@
+/* Override Radix UI Tooltip Arrow color for Competition Table */
+.competition-tooltip svg {
+  fill: #dc2626 !important;
+  background: #dc2626 !important;
+  color: #dc2626 !important;
+}

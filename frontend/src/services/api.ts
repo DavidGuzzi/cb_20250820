@@ -432,6 +432,88 @@ class ApiService {
     const queryString = params.toString();
     return this.fetchApi(`/api/dashboard/radar-data${queryString ? '?' + queryString : ''}`);
   }
+
+  // ====================================================================
+  // SIMULATION ENDPOINTS
+  // ====================================================================
+
+  // Calculate simulation with real OLS model
+  async calculateSimulation(params: {
+    tipologia: string;
+    palancas: string[];
+    tamanoTienda: string;
+    features: {
+      frentesPropios: number;
+      frentesCompetencia: number;
+      skuPropios: number;
+      skuCompetencia: number;
+      equiposFrioPropios: number;
+      equiposFrioCompetencia: number;
+      puertasPropias: number;
+      puertasCompetencia: number;
+    };
+    maco: number;
+    exchangeRate: number;
+  }): Promise<{
+    success: boolean;
+    uplift: number;
+    roi: number;
+    payback: number | null;
+    capex_breakdown: Array<{
+      palanca: string;
+      capex_usd: number;
+      fee_usd: number;
+    }>;
+    total_capex_usd: number;
+    total_fee_usd: number;
+    total_capex_cop: number;
+    total_fee_cop: number;
+    prediction_with_palanca: number;
+    prediction_control: number;
+    vol_inicial: number;
+    ganancia_incremental: number;
+    error?: string;
+  }> {
+    return this.fetchApi('/api/simulation/calculate', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  // Get OLS parameters for a tipologia
+  async getOLSParams(tipologia: string): Promise<{
+    success: boolean;
+    params: Record<string, number>;
+    tipologia: string;
+    table: string;
+    error?: string;
+  }> {
+    const params = new URLSearchParams();
+    params.append('tipologia', tipologia);
+    return this.fetchApi(`/api/simulation/ols-params?${params.toString()}`);
+  }
+
+  // Get CAPEX and Fee breakdown
+  async getCapexFee(
+    tipologia: string,
+    palancas: string[]
+  ): Promise<{
+    success: boolean;
+    breakdown: Array<{
+      palanca: string;
+      capex_usd: number;
+      fee_usd: number;
+    }>;
+    total_capex_usd: number;
+    total_fee_usd: number;
+    tipologia: string;
+    error?: string;
+  }> {
+    const params = new URLSearchParams();
+    params.append('tipologia', tipologia);
+    params.append('palancas', palancas.join(','));
+    return this.fetchApi(`/api/simulation/capex-fee?${params.toString()}`);
+  }
 }
 
 export const apiService = new ApiService();

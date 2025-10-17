@@ -40,8 +40,15 @@ DB_CONFIG = {
 }
 
 # File paths
-EXCEL_FILE = 'app_db_20251015_1926.xlsx'
+EXCEL_FILE = 'app_db_20251016_1007.xlsx'
 PARQUET_FILE = 'df_ab_test_simulations.parquet'
+
+# OLS Parameters Excel files
+OLS_PARAMS_FILES = {
+    'ols_params_drogas': 'df_drg_params.xlsx',
+    'ols_params_conveniencia': 'df_cnv_params.xlsx',
+    'ols_params_super_hiper': 'df_seh_params.xlsx'
+}
 
 # Sheet to table mapping (Excel)
 SHEET_TO_TABLE = {
@@ -108,6 +115,16 @@ class ExcelToPostgresMigrator:
             return df
         except Exception as e:
             logger.error(f"❌ Error reading Parquet '{file_path}': {e}")
+            raise
+
+    def read_excel_file(self, file_path: str) -> pd.DataFrame:
+        """Read entire Excel file (single sheet) into DataFrame"""
+        try:
+            df = pd.read_excel(file_path)
+            logger.info(f"📊 Read Excel file '{file_path}': {len(df):,} rows")
+            return df
+        except Exception as e:
+            logger.error(f"❌ Error reading Excel file '{file_path}': {e}")
             raise
 
     def insert_dataframe(self, df: pd.DataFrame, table_name: str, batch_size: int = 10000):
@@ -211,6 +228,24 @@ class ExcelToPostgresMigrator:
                 # Insert data
                 self.insert_dataframe(df, table_name)
 
+        # Migrate OLS Parameters Excel files
+        logger.info("\n📊 Processing OLS Parameters...")
+        for table_name, excel_file in OLS_PARAMS_FILES.items():
+            if os.path.exists(excel_file):
+                logger.info(f"\n📋 Processing '{excel_file}' → '{table_name}'")
+
+                # Read Excel file
+                df = self.read_excel_file(excel_file)
+
+                # Truncate if requested
+                if truncate:
+                    self.truncate_table(table_name)
+
+                # Insert data
+                self.insert_dataframe(df, table_name)
+            else:
+                logger.warning(f"⚠️  OLS params file not found: {excel_file}")
+
         # Migrate Parquet file (simulation_result - 1M+ rows)
         if parquet_file and os.path.exists(parquet_file):
             logger.info(f"\n🔥 Processing Parquet: '{parquet_file}' → 'simulation_result'")
@@ -237,7 +272,7 @@ class ExcelToPostgresMigrator:
         """Validate migration by counting rows"""
         logger.info("\n🔍 Validating migration...")
 
-        all_tables = list(SHEET_TO_TABLE.values()) + ['simulation_result']
+        all_tables = list(SHEET_TO_TABLE.values()) + list(OLS_PARAMS_FILES.keys()) + ['simulation_result']
 
         total_rows = 0
         for table_name in sorted(set(all_tables)):  # Remove duplicates and sort

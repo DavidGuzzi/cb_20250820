@@ -17,6 +17,7 @@ export function TimelineChart({ filters }: TimelineChartProps) {
   const [evolutionData, setEvolutionData] = useState<any[]>([]);
   const [palancaName, setPalancaName] = useState<string>('');
   const [projectStartFormatted, setProjectStartFormatted] = useState<string | null>(null);
+  const [palancaEndFormatted, setPalancaEndFormatted] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [missingFilters, setMissingFilters] = useState<string[]>([]);
@@ -111,6 +112,7 @@ export function TimelineChart({ filters }: TimelineChartProps) {
           setEvolutionData(chartData);
           setPalancaName(response.palanca_name || filters.palanca);
           setProjectStartFormatted(response.project_start_formatted || null);
+          setPalancaEndFormatted(response.palanca_end_formatted || null);
         } else {
           // Check if missing filters
           if (response.missing_filters && response.missing_filters.length > 0) {

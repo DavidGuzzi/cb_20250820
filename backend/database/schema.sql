@@ -97,11 +97,10 @@ CREATE TABLE store_master (
 -- Audit Master (Auditorías de tiendas por semana)
 CREATE TABLE audit_master (
     id SERIAL PRIMARY KEY,
-    cod_pdv BIGINT NOT NULL,  -- Store code (can be sellin or sellout code)
     week VARCHAR(50) NOT NULL,  -- Week label (e.g., "Ruta SEMANA 1")
     date VARCHAR(20) NOT NULL,  -- Date as text (e.g., "6/10/2025")
     hour VARCHAR(20) NOT NULL,  -- Time as text (e.g., "10:44 PM")
-    typology_id INTEGER NOT NULL REFERENCES typology_master(typology_id),
+    store_code_sellin VARCHAR(50) NOT NULL,  -- Store code from store_master
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -153,6 +152,33 @@ CREATE TABLE capex_fee (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT unique_capex_fee UNIQUE (typology_id, lever_id)
+);
+
+-- OLS Model Parameters - Droguerías
+CREATE TABLE ols_params_drogas (
+    id SERIAL PRIMARY KEY,
+    feature VARCHAR(100) NOT NULL UNIQUE,  -- Parameter name (Intercept, cajero_vendedor, etc.)
+    parametro DECIMAL(15, 6) NOT NULL,     -- Coefficient value
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- OLS Model Parameters - Conveniencia
+CREATE TABLE ols_params_conveniencia (
+    id SERIAL PRIMARY KEY,
+    feature VARCHAR(100) NOT NULL UNIQUE,  -- Parameter name (Intercept, cajero_vendedor, etc.)
+    parametro DECIMAL(15, 6) NOT NULL,     -- Coefficient value
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- OLS Model Parameters - Super e hiper
+CREATE TABLE ols_params_super_hiper (
+    id SERIAL PRIMARY KEY,
+    feature VARCHAR(100) NOT NULL UNIQUE,  -- Parameter name (Intercept, metro_cuadrado, etc.)
+    parametro DECIMAL(15, 6) NOT NULL,     -- Coefficient value
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Simulation Summary (Resúmenes estadísticos por combinación de palancas)
@@ -277,9 +303,8 @@ CREATE INDEX idx_store_lever ON store_master(lever_id);
 CREATE INDEX idx_store_active ON store_master(is_active) WHERE is_active = TRUE;
 
 -- Indexes on audit_master
-CREATE INDEX idx_audit_cod_pdv ON audit_master(cod_pdv);
+CREATE INDEX idx_audit_store_code ON audit_master(store_code_sellin);
 CREATE INDEX idx_audit_week ON audit_master(week);
-CREATE INDEX idx_audit_typology ON audit_master(typology_id);
 
 -- Indexes on period_master
 CREATE INDEX idx_period_dates ON period_master(start_date, end_date);
@@ -288,6 +313,11 @@ CREATE INDEX idx_period_type ON period_master(period_type);
 -- Indexes on capex_fee
 CREATE INDEX idx_capex_fee_typology ON capex_fee(typology_id);
 CREATE INDEX idx_capex_fee_lever ON capex_fee(lever_id);
+
+-- Indexes on OLS params tables
+CREATE INDEX idx_ols_drogas_feature ON ols_params_drogas(feature);
+CREATE INDEX idx_ols_conveniencia_feature ON ols_params_conveniencia(feature);
+CREATE INDEX idx_ols_super_hiper_feature ON ols_params_super_hiper(feature);
 
 -- Indexes on simulation_summary
 CREATE INDEX idx_simulation_summary_typology ON simulation_summary(typology_id);
@@ -400,6 +430,9 @@ CREATE TRIGGER update_audit_master_updated_at BEFORE UPDATE ON audit_master FOR 
 CREATE TRIGGER update_ab_test_result_updated_at BEFORE UPDATE ON ab_test_result FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_ab_test_summary_updated_at BEFORE UPDATE ON ab_test_summary FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_capex_fee_updated_at BEFORE UPDATE ON capex_fee FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_ols_drogas_updated_at BEFORE UPDATE ON ols_params_drogas FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_ols_conveniencia_updated_at BEFORE UPDATE ON ols_params_conveniencia FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_ols_super_hiper_updated_at BEFORE UPDATE ON ols_params_super_hiper FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_simulation_summary_updated_at BEFORE UPDATE ON simulation_summary FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
@@ -418,6 +451,9 @@ COMMENT ON TABLE audit_master IS 'Registro de auditorías de tiendas por semana 
 COMMENT ON TABLE ab_test_result IS 'Resultados detallados de pruebas A/B por tienda y período';
 COMMENT ON TABLE ab_test_summary IS 'Resúmenes agregados de pruebas A/B por tipología y palanca';
 COMMENT ON TABLE capex_fee IS 'Costos CAPEX y Fee por tipología y palanca para cálculos de ROI';
+COMMENT ON TABLE ols_params_drogas IS 'Coeficientes del modelo OLS para tipología Droguerías';
+COMMENT ON TABLE ols_params_conveniencia IS 'Coeficientes del modelo OLS para tipología Conveniencia';
+COMMENT ON TABLE ols_params_super_hiper IS 'Coeficientes del modelo OLS para tipología Super e hiper';
 COMMENT ON TABLE simulation_summary IS 'Resúmenes estadísticos de simulaciones OLS por combinación de palancas';
 COMMENT ON TABLE simulation_result IS 'Resultados completos de simulaciones del modelo OLS (1M+ rows) con uplifts predichos';
 

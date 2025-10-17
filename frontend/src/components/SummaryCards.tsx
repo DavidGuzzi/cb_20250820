@@ -12,10 +12,17 @@ interface SummaryCardsProps {
 interface PDVSummary {
   control_count: number;
   foco_count: number;
+  control_visits: number;
+  foco_visits: number;
 }
 
 export function SummaryCards({ tipologia, palanca }: SummaryCardsProps) {
-  const [pdvData, setPdvData] = useState<PDVSummary>({ control_count: 0, foco_count: 0 });
+  const [pdvData, setPdvData] = useState<PDVSummary>({
+    control_count: 0,
+    foco_count: 0,
+    control_visits: 0,
+    foco_visits: 0
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -34,7 +41,9 @@ export function SummaryCards({ tipologia, palanca }: SummaryCardsProps) {
         if (data.success) {
           setPdvData({
             control_count: data.control_count || 0,
-            foco_count: data.foco_count || 0
+            foco_count: data.foco_count || 0,
+            control_visits: data.control_visits || 0,
+            foco_visits: data.foco_visits || 0
           });
         }
       } catch (error) {
@@ -70,15 +79,19 @@ export function SummaryCards({ tipologia, palanca }: SummaryCardsProps) {
               </div>
             </div>
 
-            {/* Visitas Column (Placeholder) */}
-            <div className="space-y-1 opacity-60">
+            {/* Visitas Column */}
+            <div className="space-y-1">
               <div className="flex items-center justify-center pb-1 border-b">
                 <Users className="h-3 w-3 text-muted-foreground mr-1" />
-                <span className="text-[10px] text-muted-foreground font-semibold">Visitas</span>
+                <span className="text-[10px] text-foreground font-semibold">Visitas</span>
               </div>
               <div className="flex flex-col items-center p-2 bg-muted/30 rounded">
-                <div className="text-xl font-bold text-muted-foreground">---</div>
-                <div className="text-xl font-bold text-muted-foreground mt-0.5">---</div>
+                <div className="text-xl font-bold text-foreground">
+                  {loading ? '...' : pdvData.control_visits}
+                </div>
+                <div className="text-xl font-bold text-primary mt-0.5">
+                  {loading ? '...' : pdvData.foco_visits}
+                </div>
               </div>
             </div>
           </div>
