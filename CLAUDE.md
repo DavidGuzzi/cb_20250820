@@ -196,57 +196,71 @@ The Analysis area now features a unified "Simulaciones" section replacing the pr
 - **Centered Layout**: All steps centered with consistent spacing
 - **Single Scroll**: Only Step 4 (feature matrix) has internal scroll for configurations
 
-**SimulationPersonalizada - 5-Step Interactive Flow:**
+**SimulationPersonalizada - 6-Step Interactive Flow:**
 
 1. **Step 1 - Tipología Selection**:
    - Radio buttons for Super e hiper, Conveniencia, Droguerías
    - Mandatory selection to proceed
 
-2. **Step 2 - Palanca Configuration**:
-   - **Horizontal Grid Layout**: `grid-cols-[200px_1fr]`
-   - **Left Column (200px)**: Type selection - Simple (1 palanca) or Multiple (2+ palancas)
-   - **Right Column**: 2-column grid of palancas with checkboxes
-   - **Palancas Available**: Punta de góndola, Metro cuadrado, Isla, Cooler, Nevera vertical, Activación en tienda, Material POP
-   - **Validation**: Simple requires exactly 1 palanca, Multiple requires minimum 2
+2. **Step 2 - Tipo de Simulación**:
+   - Radio buttons for Simple (1 palanca) or Múltiple (2+ palancas)
+   - Determines palanca selection constraints in next step
 
-3. **Step 3 - Store Size**:
+3. **Step 3 - Palanca Selection**:
+   - **2-column grid** of palancas with checkboxes
+   - **Dynamically loaded** from backend based on selected tipología
+   - **Validation**: Simple requires exactly 1 palanca, Multiple requires minimum 2
+   - **Palancas Available**: Punta de góndola, Metro cuadrado, Isla, Cooler, Nevera vertical, Activación en tienda, Material POP
+
+4. **Step 4 - Store Size**:
    - Radio buttons for Pequeño, Mediano, Grande
+   - **Tooltips**: Show sales range definitions per tipología
    - **Smart Validation**:
      - Pequeño disabled for Multiple palancas
-     - Grande disabled for Droguerías tipología
+   - **Responsive sizing labels** with context-aware descriptions
 
-4. **Step 4 - Feature Matrix + Financial Parameters**:
-   - **Feature Matrix** (scrollable section):
-     - Frentes de góndola (Propios/Competencia)
-     - SKUs disponibles (Propios/Competencia)
-     - Equipos de frío (Propios/Competencia)
-     - Puertas de refrigerador (Propias/Competencia)
-   - **Financial Parameters** (below matrix, separated with border):
-     - Inversión Total (COP)
-     - MACO (%)
-   - All fields with default values, fully editable
+5. **Step 5 - Feature Matrix**:
+   - **Scrollable table** with Propios/Competencia columns:
+     - Cantidad de frentes (Propios/Competencia)
+     - Cantidad de SKU's (Propios/Competencia)
+     - EDF's adicionales (Propios/Competencia - only for Super e hiper)
+     - Cantidad puertas COF (Propias/Competencia)
+   - **Info tooltips**: Show recommended ranges per tipología + store size
+   - **Editable inputs**: All fields allow deletion/clearing with validation
+   - **Validation**: All required fields must be > 0 to proceed (empty values block navigation)
+   - **Default values**: Pre-filled with recommended averages based on tipología + store size
+   - **Informative banner**: Explains default values are based on observed data
 
-5. **Step 5 - Results Display**:
-   - **Calculation Animation**:
-     - Multi-layer spinning circles (3 concentric rings at different speeds)
-     - 4 floating dots at cardinal directions with ping animation
+6. **Step 6 - Financial Parameters**:
+   - **CAPEX & Fee (USD)**: Auto-loaded from backend based on tipología + selected palancas
+   - **Tipo de Cambio (TRM)**: Editable exchange rate field (default: 3912, allows clearing with validation)
+   - **Total en COP**: Auto-calculated display showing converted investment
+   - **MACO (%)**: Editable margin percentage (default: 35)
+
+7. **Step 7 - Results Display**:
+   - **Calculation Animation** (covers entire simulation area):
+     - Covers full content area (from breadcrumb to bottom)
+     - Spinning circle with glow effect + Sparkles icon
+     - 4 floating particles at cardinal directions with ping animation
      - Dynamic messages: "Analizando features..." → "Ejecutando modelo OLS..." → "Calculando resultados..."
      - Progress bar: 0% → 33% → 66% → 100%
-     - Total duration: ~2.5 seconds
+     - **Random duration**: Between 0.5-3 seconds (randomized on each calculation)
+     - Semi-transparent backdrop with blur effect
    - **Results Table Format**:
      - Compact table with Métrica, Valor, Descripción columns
      - **Uplift**: Percentage increase in sales (green, TrendingUp icon)
      - **ROI**: Return on investment per $1 (primary color, DollarSign icon)
      - **Payback**: Months to recover investment (orange, Calendar icon)
-   - **Summary Section**: Shows all configuration parameters (tipología, tamaño, palancas, inversión, MACO)
-   - **Action Buttons**: "Nueva Simulación" (reset) and "Guardar Simulación" (disabled/future)
+   - **Action Buttons**: "Nueva Simulación" (reset)
 
 **Technical Details:**
-- **OLS Calculation**: Mock formula based on feature scores with competitive analysis
+- **OLS Calculation**: Real API call to `/api/simulation/calculate` using actual model coefficients from PostgreSQL
 - **Form Validation**: Step-by-step validation prevents progression until requirements met
-- **No Progress Indicators**: Clean UI without step numbers, percentages, or progress bars in navigation
-- **Navigation**: "Anterior"/"Continuar" buttons at bottom, "Simular" button at Step 4
+- **Breadcrumb Navigation**: Centered badges showing completed selections (clickable to navigate back)
+- **Feature Input Flexibility**: All numeric inputs allow complete deletion, with validation preventing advancement when empty
+- **Navigation**: "Anterior"/"Continuar" buttons at bottom (hidden during calculation), "Simular" button at Step 6
 - **State Management**: All form data maintained in `formData` state object
+- **Animation Positioning**: Overlay uses `absolute inset-0` relative to content area container for full coverage
 
 **SimulationEstudio:**
 - Placeholder component with "Coming Soon" message
@@ -657,6 +671,35 @@ gcloud run logs tail retail-backend --region=us-central1 | grep -i "utf\|ascii\|
 ---
 
 ## Recent Updates
+
+### 2025-10-17: SimulationPersonalizada UX Enhancements
+**Frontend Improvements:**
+- **Feature Matrix Input Flexibility**: All 8 feature inputs (frentes, SKUs, equipos, puertas) now allow complete deletion/clearing
+  - Users can delete values to empty state (shows placeholder "0")
+  - Validation prevents navigation to next step if any required field is empty (must be > 0)
+  - Pattern: `value={formData.features.frentesPropios || ''}` with `value === '' ? 0 : parseInt(value)` logic
+  - Applied to: frentesPropios, frentesCompetencia, skuPropios, skuCompetencia, equiposFrioPropios, equiposFrioCompetencia, puertasPropias, puertasCompetencia
+
+- **Centered Breadcrumb Navigation**: Selection badges now display centered instead of left-aligned
+  - Added `justify-center` class to breadcrumb flex container
+  - Improves visual hierarchy and balance in UI
+
+- **Full-Area Calculation Animation**: Animation overlay now covers entire simulation area (not just Step 6 card)
+  - Covers full content area from breadcrumb to bottom of screen
+  - Uses `absolute inset-0` positioned relative to content area container (`flex-1 overflow-hidden p-6 relative`)
+  - **Random duration**: Between 0.5-3 seconds (500ms-3000ms), randomized on each calculation
+  - Semi-transparent backdrop (`bg-background/95 backdrop-blur-sm`) for better visibility
+  - Spinning circle animation with Sparkles icon, 4 floating particles, dynamic messages, and progress bar
+  - Navigation buttons hidden during calculation (`{currentStep < 7 && !isCalculating && ...}`)
+
+**Technical Changes:**
+- `frontend/src/components/SimulationPersonalizada.tsx`: Modified input handling, breadcrumb layout, and animation positioning
+- Removed duplicate overlay from Step 6 card, consolidated into single global overlay
+- Animation maintains same visual design with improved positioning and random timing
+
+**Files Modified:**
+- `frontend/src/components/SimulationPersonalizada.tsx`: Input patterns, breadcrumb centering, animation overlay repositioning
+- `CLAUDE.md`: Updated SimulationPersonalizada documentation with 7-step flow and enhanced technical details
 
 ### 2025-10-16: OLS Model Parameters & Audit Master Restructure
 **Database Schema Update:**

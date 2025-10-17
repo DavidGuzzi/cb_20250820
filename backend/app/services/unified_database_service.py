@@ -1409,6 +1409,9 @@ VISTA: v_evolution_timeline
             feature_vector['q_cof_puertas'] = features.get('puertasPropias', 0)
             feature_vector['q_cof_puertas_competencia'] = features.get('puertasCompetencia', 0)
 
+            # Add vol_inicial to feature vector (store size factor)
+            feature_vector['vol_inicial'] = vol_inicial
+
             # Palanca features mapping (name to OLS parameter name)
             palanca_mapping = {
                 'Exhibición adicional mamut': 'exhibicion_adicional_mamut',

@@ -167,7 +167,7 @@ function SelectionBreadcrumb({
 
   return (
     <div className="border-b border-border bg-muted/30 px-6 py-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-2">
         {items.map((item, index) => {
           const Icon = item.icon;
           const isClickable = item.step !== undefined && onItemClick;
@@ -378,7 +378,17 @@ export function SimulationPersonalizada() {
       case 4: // Tamaño
         return formData.tamanoTienda !== '';
       case 5: // Features
-        return true;
+        // Validate all feature fields are not empty (> 0)
+        const allFeaturesValid =
+          formData.features.frentesPropios > 0 &&
+          formData.features.frentesCompetencia > 0 &&
+          formData.features.skuPropios > 0 &&
+          formData.features.skuCompetencia > 0 &&
+          formData.features.puertasPropias > 0 &&
+          formData.features.puertasCompetencia > 0 &&
+          (formData.tipologia !== 'Super e hiper' ||
+            (formData.features.equiposFrioPropios > 0 && formData.features.equiposFrioCompetencia > 0));
+        return allFeaturesValid;
       case 6: // Financieros
         return formData.exchangeRate > 0; // Validate exchange rate is not empty
       default:
@@ -391,13 +401,19 @@ export function SimulationPersonalizada() {
     setIsCalculating(true);
     setCalculationProgress(0);
     setError('');
-    setCurrentStep(7); // Ir a pantalla de resultados (Paso 7)
+    // NO cambiar de paso todavía, mantener en Paso 6 para animación en mismo cuadro
+
+    // Duración aleatoria entre 0.5 y 3 segundos (500ms - 3000ms)
+    const randomDuration = Math.random() * 2500 + 500; // 500-3000ms
+    const step1Duration = randomDuration * 0.33;
+    const step2Duration = randomDuration * 0.33;
+    const step3Duration = randomDuration * 0.34;
 
     // Simular progreso con mensajes dinámicos
     const steps = [
-      { progress: 33, message: 'Analizando features...', delay: 500 },
-      { progress: 66, message: 'Ejecutando modelo OLS...', delay: 600 },
-      { progress: 100, message: 'Calculando resultados...', delay: 500 }
+      { progress: 33, message: 'Analizando features...', delay: step1Duration },
+      { progress: 66, message: 'Ejecutando modelo OLS...', delay: step2Duration },
+      { progress: 100, message: 'Calculando resultados...', delay: step3Duration }
     ];
 
     for (const step of steps) {
@@ -433,14 +449,19 @@ export function SimulationPersonalizada() {
           fee_cop: item.fee_usd * formData.exchangeRate
         }));
         setCapexBreakdown(breakdown);
+
+        // Cambiar a paso 7 (resultados) solo después de completar la animación
+        setCurrentStep(7);
       } else {
         setError(response.error || 'Error al calcular simulación');
         setResults({ uplift: 0, roi: 0, payback: 0 });
+        setCurrentStep(7); // Mostrar error en paso 7
       }
     } catch (err) {
       console.error('Error calculating simulation:', err);
       setError('Error al calcular simulación');
       setResults({ uplift: 0, roi: 0, payback: 0 });
+      setCurrentStep(7); // Mostrar error en paso 7
     } finally {
       setIsCalculating(false);
     }
@@ -525,7 +546,7 @@ export function SimulationPersonalizada() {
         <SelectionBreadcrumb items={getBreadcrumbItems()} onItemClick={handleBreadcrumbClick} />
 
       {/* Content area */}
-      <div className="flex-1 overflow-hidden p-6">
+      <div className="flex-1 overflow-hidden p-6 relative">
         <div className="relative h-full flex items-center justify-center">
           {/* Paso 1: Tipología */}
           {currentStep === 1 && (
@@ -755,23 +776,31 @@ export function SimulationPersonalizada() {
                           <td className="p-3">
                             <Input
                               type="number"
-                              value={formData.features.frentesPropios}
-                              onChange={(e) => setFormData({
-                                ...formData,
-                                features: { ...formData.features, frentesPropios: parseInt(e.target.value) || 0 }
-                              })}
+                              value={formData.features.frentesPropios || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setFormData({
+                                  ...formData,
+                                  features: { ...formData.features, frentesPropios: value === '' ? 0 : parseInt(value) }
+                                });
+                              }}
                               className="w-24 text-center mx-auto"
+                              placeholder="0"
                             />
                           </td>
                           <td className="p-3">
                             <Input
                               type="number"
-                              value={formData.features.frentesCompetencia}
-                              onChange={(e) => setFormData({
-                                ...formData,
-                                features: { ...formData.features, frentesCompetencia: parseInt(e.target.value) || 0 }
-                              })}
+                              value={formData.features.frentesCompetencia || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setFormData({
+                                  ...formData,
+                                  features: { ...formData.features, frentesCompetencia: value === '' ? 0 : parseInt(value) }
+                                });
+                              }}
                               className="w-24 text-center mx-auto"
+                              placeholder="0"
                             />
                           </td>
                         </tr>
@@ -796,23 +825,31 @@ export function SimulationPersonalizada() {
                           <td className="p-3">
                             <Input
                               type="number"
-                              value={formData.features.skuPropios}
-                              onChange={(e) => setFormData({
-                                ...formData,
-                                features: { ...formData.features, skuPropios: parseInt(e.target.value) || 0 }
-                              })}
+                              value={formData.features.skuPropios || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setFormData({
+                                  ...formData,
+                                  features: { ...formData.features, skuPropios: value === '' ? 0 : parseInt(value) }
+                                });
+                              }}
                               className="w-24 text-center mx-auto"
+                              placeholder="0"
                             />
                           </td>
                           <td className="p-3">
                             <Input
                               type="number"
-                              value={formData.features.skuCompetencia}
-                              onChange={(e) => setFormData({
-                                ...formData,
-                                features: { ...formData.features, skuCompetencia: parseInt(e.target.value) || 0 }
-                              })}
+                              value={formData.features.skuCompetencia || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setFormData({
+                                  ...formData,
+                                  features: { ...formData.features, skuCompetencia: value === '' ? 0 : parseInt(value) }
+                                });
+                              }}
                               className="w-24 text-center mx-auto"
+                              placeholder="0"
                             />
                           </td>
                         </tr>
@@ -838,23 +875,31 @@ export function SimulationPersonalizada() {
                             <td className="p-3">
                               <Input
                                 type="number"
-                                value={formData.features.equiposFrioPropios}
-                                onChange={(e) => setFormData({
-                                  ...formData,
-                                  features: { ...formData.features, equiposFrioPropios: parseInt(e.target.value) || 0 }
-                                })}
+                                value={formData.features.equiposFrioPropios || ''}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  setFormData({
+                                    ...formData,
+                                    features: { ...formData.features, equiposFrioPropios: value === '' ? 0 : parseInt(value) }
+                                  });
+                                }}
                                 className="w-24 text-center mx-auto"
+                                placeholder="0"
                               />
                             </td>
                             <td className="p-3">
                               <Input
                                 type="number"
-                                value={formData.features.equiposFrioCompetencia}
-                                onChange={(e) => setFormData({
-                                  ...formData,
-                                  features: { ...formData.features, equiposFrioCompetencia: parseInt(e.target.value) || 0 }
-                                })}
+                                value={formData.features.equiposFrioCompetencia || ''}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  setFormData({
+                                    ...formData,
+                                    features: { ...formData.features, equiposFrioCompetencia: value === '' ? 0 : parseInt(value) }
+                                  });
+                                }}
                                 className="w-24 text-center mx-auto"
+                                placeholder="0"
                               />
                             </td>
                           </tr>
@@ -880,23 +925,31 @@ export function SimulationPersonalizada() {
                           <td className="p-3">
                             <Input
                               type="number"
-                              value={formData.features.puertasPropias}
-                              onChange={(e) => setFormData({
-                                ...formData,
-                                features: { ...formData.features, puertasPropias: parseInt(e.target.value) || 0 }
-                              })}
+                              value={formData.features.puertasPropias || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setFormData({
+                                  ...formData,
+                                  features: { ...formData.features, puertasPropias: value === '' ? 0 : parseInt(value) }
+                                });
+                              }}
                               className="w-24 text-center mx-auto"
+                              placeholder="0"
                             />
                           </td>
                           <td className="p-3">
                             <Input
                               type="number"
-                              value={formData.features.puertasCompetencia}
-                              onChange={(e) => setFormData({
-                                ...formData,
-                                features: { ...formData.features, puertasCompetencia: parseInt(e.target.value) || 0 }
-                              })}
+                              value={formData.features.puertasCompetencia || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setFormData({
+                                  ...formData,
+                                  features: { ...formData.features, puertasCompetencia: value === '' ? 0 : parseInt(value) }
+                                });
+                              }}
                               className="w-24 text-center mx-auto"
+                              placeholder="0"
                             />
                           </td>
                         </tr>
@@ -1100,6 +1153,46 @@ export function SimulationPersonalizada() {
             </div>
           )}
         </div>
+
+        {/* Calculating overlay - covers entire simulation area */}
+        {isCalculating && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm z-10">
+            <div className="flex flex-col items-center space-y-4">
+              {/* Animación compacta - círculo con glow + partículas */}
+              <div className="relative w-20 h-20">
+                {/* Círculo giratorio con glow */}
+                <div
+                  className="absolute inset-0 w-20 h-20 rounded-full border-3 border-primary/20 border-t-primary animate-spin shadow-lg shadow-primary/40"
+                  style={{ animationDuration: '1s' }}
+                ></div>
+
+                {/* Ícono central Sparkles con pulse */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Sparkles className="w-7 h-7 text-primary animate-pulse" />
+                </div>
+
+                {/* Partículas flotantes más pequeñas */}
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-primary rounded-full animate-ping" style={{ animationDelay: '0s' }}></div>
+                <div className="absolute top-1/2 -right-1 -translate-y-1/2 w-1.5 h-1.5 bg-primary rounded-full animate-ping" style={{ animationDelay: '0.3s' }}></div>
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-primary rounded-full animate-ping" style={{ animationDelay: '0.6s' }}></div>
+                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-1.5 h-1.5 bg-primary rounded-full animate-ping" style={{ animationDelay: '0.9s' }}></div>
+              </div>
+
+              {/* Texto dinámico más pequeño */}
+              <div className="text-center">
+                <p className="text-sm font-medium text-foreground">
+                  {calculationMessage || 'Iniciando cálculo...'}
+                </p>
+                <div className="w-48 h-1 bg-muted rounded-full mt-3 overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${calculationProgress}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Navigation buttons */}
@@ -1123,40 +1216,6 @@ export function SimulationPersonalizada() {
               {currentStep === 6 ? 'Simular' : 'Continuar'}
               {currentStep !== 6 && <ChevronRight className="w-4 h-4 ml-1" />}
             </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Calculating overlay - centered */}
-      {isCalculating && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-10">
-          <div className="flex flex-col items-center space-y-4">
-            {/* Animación compacta - círculo con glow + partículas */}
-            <div className="relative w-20 h-20">
-              {/* Círculo giratorio con glow */}
-              <div
-                className="absolute inset-0 w-20 h-20 rounded-full border-3 border-primary/20 border-t-primary animate-spin shadow-lg shadow-primary/40"
-                style={{ animationDuration: '1s' }}
-              ></div>
-
-              {/* Ícono central Sparkles con pulse */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Sparkles className="w-7 h-7 text-primary animate-pulse" />
-              </div>
-
-              {/* Partículas flotantes más pequeñas */}
-              <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-primary rounded-full animate-ping" style={{ animationDelay: '0s' }}></div>
-              <div className="absolute top-1/2 -right-1 -translate-y-1/2 w-1.5 h-1.5 bg-primary rounded-full animate-ping" style={{ animationDelay: '0.3s' }}></div>
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-primary rounded-full animate-ping" style={{ animationDelay: '0.6s' }}></div>
-              <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-1.5 h-1.5 bg-primary rounded-full animate-ping" style={{ animationDelay: '0.9s' }}></div>
-            </div>
-
-            {/* Texto dinámico más pequeño */}
-            <div className="text-center">
-              <p className="text-sm font-medium text-foreground">
-                {calculationMessage || 'Iniciando cálculo...'}
-              </p>
-            </div>
           </div>
         </div>
       )}
