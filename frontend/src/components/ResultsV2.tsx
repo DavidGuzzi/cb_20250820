@@ -12,20 +12,24 @@ import {
   Moon,
   BarChart3,
   MessageSquare,
-  UserCheck
+  UserCheck,
+  LogOut
 } from 'lucide-react';
 import { useChatContext } from '../contexts/ChatContext';
 import { useTheme } from './ThemeProvider';
 import { SimulationVisualization } from './SimulationVisualization';
 import gatoradeLogo from '../assets/4de2379cad6c1c3cdddbd220d1ac6ce242ae078f.png';
 import gatoradeLogoDark from '../assets/0ebfb34dd11ac7b6cf64b19c7b02742c273e0b93.png';
+import poweredByImageLight from '../assets/8388e6abe7aa42dbcd9db7058b9d67171b1d8c24b.png';
+import poweredByImageDark from '../assets/8388e6abe7aa42dbcd9db7058b9d67171b1d8c24.png';
 
 interface ResultsProps {
   userEmail: string;
   onBackToDashboard: () => void;
+  onLogout: () => void;
 }
 
-export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
+export function Results({ userEmail, onBackToDashboard, onLogout }: ResultsProps) {
   const { theme, toggleTheme } = useTheme();
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -194,7 +198,7 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
   return (
     <div className="min-h-screen bg-background">
       {/* Header Navigation - matching Dashboard */}
-      <header className="border-b bg-card px-6 py-4">
+      <header className="border-b bg-card px-6 py-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="flex items-center gap-3">
@@ -206,43 +210,44 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
               <h1 className="text-xl font-bold text-foreground">
                 Gatorade A/B Testing
               </h1>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleTheme}
+                className="text-muted-foreground hover:text-foreground ml-2"
+              >
+                {theme === 'light' ? (
+                  <Moon className="h-4 w-4" />
+                ) : (
+                  <Sun className="h-4 w-4" />
+                )}
+              </Button>
             </div>
           </div>
-          
+
           <nav className="flex items-center space-x-2">
             <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleTheme}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              {theme === 'light' ? (
-                <Moon className="h-4 w-4" />
-              ) : (
-                <Sun className="h-4 w-4" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
+              variant="outline"
               onClick={onBackToDashboard}
-              className="flex items-center space-x-2 text-muted-foreground hover:text-foreground"
+              className="flex items-center space-x-2 text-muted-foreground hover:!text-white hover:!bg-primary transition-colors"
             >
               <BarChart3 className="h-4 w-4" />
               <span>Dashboard</span>
             </Button>
             <Button
-              variant="default"
-              className="flex items-center space-x-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+              variant="outline"
+              size="sm"
+              onClick={onLogout}
+              className="text-muted-foreground hover:text-foreground hover:bg-gray-200 dark:hover:bg-gray-700"
             >
-              <MessageSquare className="h-4 w-4" />
-              <span>Análisis</span>
+              <LogOut className="w-4 h-4" />
             </Button>
           </nav>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex h-[calc(100vh-81px)]">
+      <main className="flex h-[calc(100vh-65px-48px)]">
         {/* Panel izquierdo - Simulaciones */}
         <div className="flex-1 p-6 overflow-y-auto">
           <SimulationVisualization />
@@ -443,6 +448,30 @@ export function Results({ userEmail, onBackToDashboard }: ResultsProps) {
           </div>
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="bg-background h-12">
+        <div className="h-full flex items-center justify-center relative">
+          <div className="absolute inset-0 flex items-center px-6">
+            <div className="w-full border-t border-border"></div>
+          </div>
+          <div className="relative flex items-center space-x-3 bg-background px-4">
+            <span className="text-xs text-muted-foreground font-medium">Powered by</span>
+            <a
+              href="https://marketone.co/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block"
+            >
+              <img
+                src={theme === 'dark' ? poweredByImageDark : poweredByImageLight}
+                alt="MarketOne Logo"
+                className="h-8 opacity-90 hover:opacity-100 transition-all duration-300 hover:scale-105 cursor-pointer"
+              />
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

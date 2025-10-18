@@ -29,11 +29,9 @@ const TIPOLOGIA_COLORS: Record<string, string> = {
 export function RadarChartView({ data, tipologias, mode, detailedData = [] }: RadarChartViewProps) {
   if (data.length === 0) {
     return (
-      <Card className="h-full bg-card shadow-sm">
-        <CardContent className="flex items-center justify-center h-full">
-          <div className="text-muted-foreground">No hay datos disponibles para el radar chart</div>
-        </CardContent>
-      </Card>
+      <div className="h-full flex items-center justify-center">
+        <div className="text-muted-foreground">No hay datos disponibles para el radar chart</div>
+      </div>
     );
   }
 
@@ -157,37 +155,35 @@ export function RadarChartView({ data, tipologias, mode, detailedData = [] }: Ra
   };
 
   return (
-    <Card className="h-full bg-card shadow-sm">
-      <CardContent className="h-full p-6">
-        <ResponsiveContainer width="100%" height="100%">
-          <RadarChart data={chartData}>
-            <PolarGrid stroke="#e5e7eb" />
-            <PolarAngleAxis
-              dataKey="palanca"
-              tick={<CustomTick />}
-            />
-            <PolarRadiusAxis
-              angle={90}
-              domain={[0, 'auto']}
-              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
-            />
+    <div className="h-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <RadarChart data={chartData}>
+          <PolarGrid stroke="#e5e7eb" />
+          <PolarAngleAxis
+            dataKey="palanca"
+            tick={<CustomTick />}
+          />
+          <PolarRadiusAxis
+            angle={90}
+            domain={[0, 'auto']}
+            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+          />
 
-            {tipologias.map((tipologia) => (
-              <Radar
-                key={tipologia}
-                name={tipologia}
-                dataKey={tipologia}
-                stroke={TIPOLOGIA_COLORS[tipologia] || '#6b7280'}
-                fill={TIPOLOGIA_COLORS[tipologia] || '#6b7280'}
-                fillOpacity={mode === 'comparative' ? 0.25 : 0.4}
-                strokeWidth={2}
-              />
-            ))}
+          {tipologias.map((tipologia) => (
+            <Radar
+              key={tipologia}
+              name={tipologia}
+              dataKey={tipologia}
+              stroke={TIPOLOGIA_COLORS[tipologia] || '#6b7280'}
+              fill={TIPOLOGIA_COLORS[tipologia] || '#6b7280'}
+              fillOpacity={mode === 'comparative' ? 0.25 : 0.4}
+              strokeWidth={2}
+            />
+          ))}
 
-            <Tooltip content={<CustomTooltip />} />
-          </RadarChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
+          <Tooltip content={<CustomTooltip />} />
+        </RadarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

@@ -30,7 +30,7 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
   return (
     <div className="min-h-screen bg-background">
       {/* Header Navigation */}
-      <header className="border-b bg-card px-6 py-4">
+      <header className="border-b bg-card px-6 py-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="flex items-center gap-3">
@@ -42,85 +42,53 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
               <h1 className="text-xl font-bold text-foreground">
                 Gatorade A/B Testing
               </h1>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleTheme}
+                className="text-muted-foreground hover:text-foreground ml-2"
+              >
+                {theme === 'light' ? (
+                  <Moon className="h-4 w-4" />
+                ) : (
+                  <Sun className="h-4 w-4" />
+                )}
+              </Button>
             </div>
           </div>
-          
+
           <nav className="flex items-center space-x-2">
             <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleTheme}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              {theme === 'light' ? (
-                <Moon className="h-4 w-4" />
-              ) : (
-                <Sun className="h-4 w-4" />
-              )}
-            </Button>
-            <Button
-              variant="default"
-              className="flex items-center space-x-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
-              <BarChart3 className="h-4 w-4" />
-              <span>Dashboard</span>
-            </Button>
-            <Button
-              variant="ghost"
+              variant="outline"
               onClick={onNavigateToResults}
-              className="flex items-center space-x-2 text-muted-foreground hover:text-foreground"
+              className="flex items-center space-x-2 text-muted-foreground hover:!text-white hover:!bg-primary transition-colors"
             >
               <MessageSquare className="h-4 w-4" />
               <span>Análisis</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onLogout}
+              className="text-muted-foreground hover:text-foreground hover:bg-gray-200 dark:hover:bg-gray-700"
+            >
+              <LogOut className="w-4 h-4" />
             </Button>
           </nav>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex h-[calc(100vh-81px)]">
+      <main className="flex h-[calc(100vh-65px-48px)]">
         {/* Left Sidebar */}
-        <div className="w-80 border-r bg-card flex flex-col h-full overflow-hidden">
-          {/* Scrollable content area */}
-          <div className="flex-1 overflow-y-auto px-4 pt-4">
-            <div className="mb-3">
-              <h2 className="mb-1.5 text-foreground font-bold text-sm">Resumen de la ejecución</h2>
-              <SummaryCards tipologia={filters.tipologia} palanca={filters.palanca} />
-            </div>
-
-            <div>
-              <FilterPanel filters={filters} onFiltersChange={setFilters} />
-            </div>
+        <div className="w-80 border-r bg-card flex flex-col h-full overflow-y-auto px-4 pt-4 pb-4">
+          <div className="mb-4">
+            <h2 className="mb-2 text-foreground font-bold text-base">Resumen de la ejecución</h2>
+            <SummaryCards tipologia={filters.tipologia} palanca={filters.palanca} />
           </div>
 
-          {/* Fixed footer section */}
-          <div className="flex-shrink-0 border-t border-border px-4 py-4">
-            {/* Powered by section */}
-            <div className="flex flex-col items-center space-y-2 mb-3">
-              <span className="text-xs text-muted-foreground font-medium">Powered by</span>
-              <a
-                href="https://marketone.co/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block"
-              >
-                <img
-                  src={theme === 'dark' ? poweredByImageDark : poweredByImageLight}
-                  alt="Powered by"
-                  className="h-9 opacity-90 hover:opacity-100 transition-all duration-300 hover:scale-105 cursor-pointer"
-                />
-              </a>
-            </div>
-
-            {/* Botón Salir */}
-            <Button
-              variant="outline"
-              onClick={onLogout}
-              className="w-full text-muted-foreground hover:text-foreground text-xs py-1.5"
-            >
-              <LogOut className="w-3 h-3 mr-1.5" />
-              Salir
-            </Button>
+          <div>
+            <FilterPanel filters={filters} onFiltersChange={setFilters} />
           </div>
         </div>
 
@@ -133,14 +101,38 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
           </div>
 
           {/* Chart Section - Takes 45% of height */}
-          <div className="flex-[0.9] min-h-0 mt-12">
+          <div className="flex-[0.7] min-h-0 mt-12">
             <h2 className="mb-2 text-foreground font-bold text-xl">Evolución temporal</h2>
-            <div className="h-[calc(100%-2rem)] max-h-80">
+            <div className="h-[calc(100%-1rem)] max-h-80">
               <TimelineChart filters={filters} />
             </div>
           </div>
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="bg-background h-12">
+        <div className="h-full flex items-center justify-center relative">
+          <div className="absolute inset-0 flex items-center px-6">
+            <div className="w-full border-t border-border"></div>
+          </div>
+          <div className="relative flex items-center space-x-3 bg-background px-4">
+            <span className="text-xs text-muted-foreground font-medium">Powered by</span>
+            <a
+              href="https://marketone.co/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block"
+            >
+              <img
+                src={theme === 'dark' ? poweredByImageDark : poweredByImageLight}
+                alt="MarketOne Logo"
+                className="h-8 opacity-90 hover:opacity-100 transition-all duration-300 hover:scale-105 cursor-pointer"
+              />
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

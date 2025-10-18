@@ -62,12 +62,12 @@ export function SummaryCards({ tipologia, palanca }: SummaryCardsProps) {
         {/* Table-style layout */}
         <div className="space-y-2">
           {/* Data Grid - PDV and Visitas as columns */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2.5">
             {/* PDV Column */}
             <div className="space-y-1">
               <div className="flex items-center justify-center pb-1 border-b">
-                <Store className="h-3 w-3 text-muted-foreground mr-1" />
-                <span className="text-[10px] text-foreground font-semibold">PDV</span>
+                <Store className="h-3.5 w-3.5 text-muted-foreground mr-1" />
+                <span className="text-[11px] text-foreground font-semibold">PDV</span>
               </div>
               <div className="flex flex-col items-center p-2 bg-muted/30 rounded">
                 <div className="text-xl font-bold text-foreground">
@@ -82,8 +82,8 @@ export function SummaryCards({ tipologia, palanca }: SummaryCardsProps) {
             {/* Visitas Column */}
             <div className="space-y-1">
               <div className="flex items-center justify-center pb-1 border-b">
-                <Users className="h-3 w-3 text-muted-foreground mr-1" />
-                <span className="text-[10px] text-foreground font-semibold">Visitas</span>
+                <Users className="h-3.5 w-3.5 text-muted-foreground mr-1" />
+                <span className="text-[11px] text-foreground font-semibold">Visitas</span>
               </div>
               <div className="flex flex-col items-center p-2 bg-muted/30 rounded">
                 <div className="text-xl font-bold text-foreground">
@@ -98,24 +98,15 @@ export function SummaryCards({ tipologia, palanca }: SummaryCardsProps) {
 
           {/* Legend at bottom */}
           <div className="flex items-center justify-center gap-3 pt-1 border-t">
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-foreground"></div>
-              <span className="text-[9px] text-muted-foreground">Control</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-foreground"></div>
+              <span className="text-[10px] text-muted-foreground font-medium">Control</span>
             </div>
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-primary"></div>
-              <span className="text-[9px] text-primary">Foco</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-primary"></div>
+              <span className="text-[10px] text-primary font-medium">Foco</span>
             </div>
           </div>
-
-          {/* Palanca info */}
-          {palanca && (
-            <div className="pt-1 border-t">
-              <div className="text-[8px] text-muted-foreground text-center">
-                {palanca}
-              </div>
-            </div>
-          )}
         </div>
       </CardContent>
     </Card>

@@ -136,10 +136,10 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between pb-1.5 border-b">
-        <div className="flex items-center gap-1.5">
-          <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-          <Label className="text-sm text-foreground font-bold">Filtros</Label>
+      <div className="flex items-center justify-between pb-2 border-b">
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Label className="text-base text-foreground font-bold">Filtros</Label>
         </div>
         {hasActiveFilters && (
           <Button

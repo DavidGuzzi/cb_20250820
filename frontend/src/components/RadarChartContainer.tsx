@@ -103,9 +103,9 @@ export function RadarChartContainer({ filters }: RadarChartContainerProps) {
   };
 
   return (
-    <div className="h-full flex flex-col p-4">
+    <div className="h-full flex flex-col p-0">
       {/* Grid 1x3 horizontal layout */}
-      <div className="grid grid-cols-3 gap-4 h-full">
+      <div className="grid grid-cols-3 gap h-full">
         {/* Super e hiper */}
         <div className="flex flex-col">
           <h3 className="text-center text-base font-bold mb-3" style={{ color: '#3b82f6' }}>

@@ -31,7 +31,7 @@ export function ResultsVisualization({ filters }: ResultsVisualizationProps) {
   return (
     <div className="h-full">
       <Card className="h-full bg-card shadow-sm">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb">
           {/* Header with toggles on opposite corners */}
           <div className="flex items-center justify-between">
             {/* Left side: Cuadro and Visual toggle */}

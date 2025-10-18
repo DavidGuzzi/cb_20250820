@@ -59,9 +59,10 @@ export default function App() {
         )}
 
         {currentView === 'results' && (
-          <Results 
+          <Results
             userEmail={userEmail}
             onBackToDashboard={handleBackToDashboard}
+            onLogout={handleLogout}
           />
         )}
 
