@@ -417,6 +417,26 @@ class UnifiedDatabaseService:
                     LIMIT 1
                 """)
 
+                # Query 0c: For Droguerías, get the city(ies) where the palanca stores are located
+                # This is used to filter control stores to the same city
+                palanca_cities = []
+                if tipologia == 'Droguerías':
+                    city_query = text("""
+                        SELECT DISTINCT s.city_id
+                        FROM store_master s
+                        JOIN typology_master t ON s.typology_id = t.typology_id
+                        JOIN lever_master l ON s.lever_id = l.lever_id
+                        WHERE t.typology_name = :tipologia
+                          AND l.lever_name = :palanca
+                          AND s.is_active = TRUE
+                          AND s.city_id IS NOT NULL
+                    """)
+                    city_result = session.execute(city_query, {
+                        'tipologia': tipologia,
+                        'palanca': palanca
+                    })
+                    palanca_cities = [row.city_id for row in city_result.fetchall()]
+
                 project_start_result = session.execute(project_start_query, {
                     'tipologia': tipologia,
                     'palanca': palanca
@@ -482,36 +502,73 @@ class UnifiedDatabaseService:
                 palanca_rows = palanca_result.fetchall()
 
                 # Query 2: Get control data (avg value per period for control group in same typology)
-                control_query = text("""
-                    SELECT
-                        p.period_label,
-                        p.start_date,
-                        p.end_date,
-                        AVG(r.value) as avg_value
-                    FROM ab_test_result r
-                    JOIN store_master s ON r.store_id = s.id
-                    JOIN lever_master l ON s.lever_id = l.lever_id
-                    JOIN period_master p ON r.period_id = p.period_id
-                    JOIN typology_master t ON s.typology_id = t.typology_id
-                    JOIN data_source_master ds ON r.source_id = ds.source_id
-                    JOIN measurement_unit_master u ON r.unit_id = u.unit_id
-                    JOIN category_master c ON r.category_id = c.category_id
-                    WHERE l.lever_name = 'Control'
-                      AND t.typology_name = :tipologia
-                      AND ds.source_name = :fuente
-                      AND u.unit_name = :unidad
-                      AND c.category_name = :categoria
-                      AND s.is_active = TRUE
-                    GROUP BY p.period_label, p.start_date, p.end_date
-                    ORDER BY p.start_date
-                """)
+                # For Droguerías: only control stores from same city as palanca stores
+                # For other typologies: all control stores in typology
+                if tipologia == 'Droguerías' and palanca_cities:
+                    # Droguerías: Filter control stores by city
+                    control_query = text("""
+                        SELECT
+                            p.period_label,
+                            p.start_date,
+                            p.end_date,
+                            AVG(r.value) as avg_value
+                        FROM ab_test_result r
+                        JOIN store_master s ON r.store_id = s.id
+                        JOIN lever_master l ON s.lever_id = l.lever_id
+                        JOIN period_master p ON r.period_id = p.period_id
+                        JOIN typology_master t ON s.typology_id = t.typology_id
+                        JOIN data_source_master ds ON r.source_id = ds.source_id
+                        JOIN measurement_unit_master u ON r.unit_id = u.unit_id
+                        JOIN category_master c ON r.category_id = c.category_id
+                        WHERE l.lever_name = 'Control'
+                          AND t.typology_name = :tipologia
+                          AND ds.source_name = :fuente
+                          AND u.unit_name = :unidad
+                          AND c.category_name = :categoria
+                          AND s.is_active = TRUE
+                          AND s.city_id = ANY(:palanca_cities)
+                        GROUP BY p.period_label, p.start_date, p.end_date
+                        ORDER BY p.start_date
+                    """)
+                    control_result = session.execute(control_query, {
+                        'tipologia': tipologia,
+                        'fuente': fuente,
+                        'unidad': unidad,
+                        'categoria': categoria,
+                        'palanca_cities': palanca_cities
+                    })
+                else:
+                    # Other typologies: All control stores in typology
+                    control_query = text("""
+                        SELECT
+                            p.period_label,
+                            p.start_date,
+                            p.end_date,
+                            AVG(r.value) as avg_value
+                        FROM ab_test_result r
+                        JOIN store_master s ON r.store_id = s.id
+                        JOIN lever_master l ON s.lever_id = l.lever_id
+                        JOIN period_master p ON r.period_id = p.period_id
+                        JOIN typology_master t ON s.typology_id = t.typology_id
+                        JOIN data_source_master ds ON r.source_id = ds.source_id
+                        JOIN measurement_unit_master u ON r.unit_id = u.unit_id
+                        JOIN category_master c ON r.category_id = c.category_id
+                        WHERE l.lever_name = 'Control'
+                          AND t.typology_name = :tipologia
+                          AND ds.source_name = :fuente
+                          AND u.unit_name = :unidad
+                          AND c.category_name = :categoria
+                          AND s.is_active = TRUE
+                        GROUP BY p.period_label, p.start_date, p.end_date
+                        ORDER BY p.start_date
+                    """)
+                    control_result = session.execute(control_query, {
+                        'tipologia': tipologia,
+                        'fuente': fuente,
+                        'unidad': unidad,
+                        'categoria': categoria
+                    })
 
-                control_result = session.execute(control_query, {
-                    'tipologia': tipologia,
-                    'fuente': fuente,
-                    'unidad': unidad,
-                    'categoria': categoria
-                })
                 control_rows = control_result.fetchall()
 
                 # Find the first period with positive palanca value
@@ -578,8 +635,22 @@ class UnifiedDatabaseService:
                     start_date = period_info['start_date']
                     display_date = period_info.get('display_date', start_date)
 
-                    # Format date as DD/MM (using display_date which is end_date for Sell Out, start_date for Sell In)
-                    date_formatted = display_date.strftime('%d/%m') if display_date else period_label
+                    # Format date based on source type:
+                    # - Sell Out sources: abbreviated month (jun, jul, etc.)
+                    # - Sell In: DD/MM format
+                    if display_date:
+                        if is_sell_out:
+                            # Spanish month abbreviations for Sell Out sources
+                            month_abbr_es = {
+                                1: 'ene', 2: 'feb', 3: 'mar', 4: 'abr', 5: 'may', 6: 'jun',
+                                7: 'jul', 8: 'ago', 9: 'sep', 10: 'oct', 11: 'nov', 12: 'dic'
+                            }
+                            date_formatted = month_abbr_es.get(display_date.month, display_date.strftime('%b').lower())
+                        else:
+                            # DD/MM format for Sell In
+                            date_formatted = display_date.strftime('%d/%m')
+                    else:
+                        date_formatted = period_label
 
                     timeline_data.append({
                         'period': period_label,
@@ -592,17 +663,52 @@ class UnifiedDatabaseService:
                     })
 
                 # Format project start and end dates as DD/MM for frontend
-                # For Sell Out sources, adjust the marker to show end of previous month if start is on 1st
+                # For Sell Out sources, find the timeline period that contains project_start_date
+                # and use its display_date (end_date) to match timeline data
                 project_start_display = project_start_date
-                if is_sell_out and project_start_date:
-                    # If project starts on the 1st of a month, display marker at end of previous month
-                    if project_start_date.day == 1:
-                        # Get last day of previous month
-                        from datetime import timedelta
-                        project_start_display = project_start_date - timedelta(days=1)
+                if is_sell_out and project_start_date and timeline_data:
+                    # Search through timeline_data to find the period containing project_start_date
+                    from datetime import datetime
+                    found_period = False
+                    for data_point in timeline_data:
+                        start_date_str = data_point.get('start_date')
+                        display_date_str = data_point.get('display_date')
 
-                project_start_formatted = project_start_display.strftime('%d/%m') if project_start_display else None
+                        if start_date_str and display_date_str:
+                            period_start = datetime.fromisoformat(start_date_str).date()
+                            period_display = datetime.fromisoformat(display_date_str).date()
+
+                            # Check if project_start_date falls within this period
+                            # For Sell Out, display_date is the end_date of the period
+                            if period_start <= project_start_date <= period_display:
+                                project_start_display = period_display
+                                found_period = True
+                                logger.info(f"Sell Out: Found period containing {project_start_date}, using display_date {period_display}")
+                                break
+
+                    if not found_period:
+                        logger.warning(f"Sell Out: Could not find timeline period containing project_start_date {project_start_date}")
+
+                # Format project start marker to match timeline data format
+                # - Sell Out sources: abbreviated month (jun, jul, etc.)
+                # - Sell In: DD/MM format
+                if project_start_display:
+                    if is_sell_out:
+                        # Spanish month abbreviations for Sell Out sources
+                        month_abbr_es = {
+                            1: 'ene', 2: 'feb', 3: 'mar', 4: 'abr', 5: 'may', 6: 'jun',
+                            7: 'jul', 8: 'ago', 9: 'sep', 10: 'oct', 11: 'nov', 12: 'dic'
+                        }
+                        project_start_formatted = month_abbr_es.get(project_start_display.month, project_start_display.strftime('%b').lower())
+                    else:
+                        # DD/MM format for Sell In
+                        project_start_formatted = project_start_display.strftime('%d/%m')
+                else:
+                    project_start_formatted = None
+
                 palanca_end_formatted = palanca_end_date.strftime('%d/%m') if palanca_end_date else None
+
+                logger.info(f"Timeline marker: project_start_formatted={project_start_formatted}, is_sell_out={is_sell_out}, timeline_periods={len(timeline_data)}")
 
                 return {
                     'success': True,
@@ -1497,6 +1603,167 @@ VISTA: v_evolution_timeline
 
         except Exception as e:
             logger.error(f"Error in calculate_simulation: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def get_monte_carlo_data(
+        self,
+        tipologia: str,
+        unidad: str,
+        selected_palancas: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Obtiene datos de simulation_result para Estudio Monte Carlo
+
+        Args:
+            tipologia: Nombre de la tipología (Super e hiper, Conveniencia, Droguerías)
+            unidad: Unidad de medida (Cajas 8oz, Ventas)
+            selected_palancas: Lista de nombres de palancas a filtrar (filtro AND)
+
+        Returns:
+            Dict con:
+            - uplift_values: array de valores uplift
+            - statistics: {media, mediana, p25, p75}
+            - available_palancas: lista de palancas disponibles para esta tipología
+            - count: número de registros
+        """
+        try:
+            with self.get_session() as session:
+                # Mapeo de tipología a ID
+                tipologia_map = {
+                    'Droguerías': 1,
+                    'Conveniencia': 2,
+                    'Super e hiper': 3
+                }
+
+                # Mapeo de unidad a ID
+                unidad_map = {
+                    'Cajas 8oz': 1,
+                    'Ventas': 2
+                }
+
+                tipologia_id = tipologia_map.get(tipologia)
+                unidad_id = unidad_map.get(unidad)
+                if not tipologia_id:
+                    return {
+                        'success': False,
+                        'error': f'Tipología inválida: {tipologia}'
+                    }
+                if not unidad_id:
+                    return {
+                        'success': False,
+                        'error': f'Unidad inválida: {unidad}'
+                    }
+
+                # Mapeo de palancas disponibles por tipología
+                palancas_map = {
+                    'Super e hiper': [
+                        'punta_de_gondola',
+                        'metro_cuadrado',
+                        'nevera_en_punto_de_pago',
+                        'rompe_trafico_cross_category'
+                    ],
+                    'Conveniencia': [
+                        'punta_de_gondola',
+                        'mini_vallas_en_fachada',
+                        'cajero_vendedor',
+                        'tienda_multipalanca'
+                    ],
+                    'Droguerías': [
+                        'exhibicion_adicional_mamut',
+                        'nevera_en_punto_de_pago',
+                        'entrepano_con_comunicacion',
+                        'cajero_vendedor',
+                        'tienda_multipalanca'
+                    ]
+                }
+
+                # Lista completa de TODAS las palancas en la tabla simulation_result
+                all_palancas = [
+                    'exhibicion_adicional_mamut',
+                    'nevera_en_punto_de_pago',
+                    'entrepano_con_comunicacion',
+                    'cajero_vendedor',
+                    'tienda_multipalanca',
+                    'punta_de_gondola',
+                    'mini_vallas_en_fachada',
+                    'metro_cuadrado',
+                    'rompe_trafico_cross_category'
+                ]
+
+                available_palancas = palancas_map.get(tipologia, [])
+
+                # Construir query base con filtros de validación
+                base_query = """
+                    SELECT uplift
+                    FROM simulation_result
+                    WHERE typology_id = :tipologia_id
+                      AND unit_id = :unidad_id
+                      AND "planograma_ejecución_check" = 1
+                      AND precios_check = 1
+                      AND carga_check = 1
+                """
+
+                # Excluir vol_inicial = 15 para Conveniencia
+                if tipologia == 'Conveniencia':
+                    base_query += " AND vol_inicial != 15"
+
+                # Agregar filtros para palancas seleccionadas
+                # Lógica: palancas seleccionadas = 1, TODAS las demás (de todas las tipologías) = 0
+                params = {'tipologia_id': tipologia_id, 'unidad_id': unidad_id}
+                if selected_palancas and len(selected_palancas) > 0:
+                    # Palancas seleccionadas deben ser = 1
+                    for palanca in selected_palancas:
+                        if palanca in available_palancas:
+                            base_query += f" AND {palanca} = 1"
+
+                    # TODAS las demás palancas (incluyendo de otras tipologías) deben ser = 0
+                    for palanca in all_palancas:
+                        if palanca not in selected_palancas:
+                            base_query += f" AND {palanca} = 0"
+
+                # Ejecutar query
+                result = session.execute(text(base_query), params)
+                # Convert Decimal to float to avoid type errors
+                uplift_values = [float(row[0]) if row[0] is not None else 0.0 for row in result.fetchall()]
+
+                if not uplift_values:
+                    return {
+                        'success': True,
+                        'uplift_values': [],
+                        'statistics': {
+                            'media': 0,
+                            'mediana': 0,
+                            'p25': 0,
+                            'p75': 0
+                        },
+                        'available_palancas': available_palancas,
+                        'count': 0
+                    }
+
+                # Calcular estadísticas con pandas
+                df = pd.DataFrame({'uplift': uplift_values})
+                stats = {
+                    'media': float(df['uplift'].mean()),
+                    'mediana': float(df['uplift'].median()),
+                    'p25': float(df['uplift'].quantile(0.25)),
+                    'p75': float(df['uplift'].quantile(0.75))
+                }
+
+                logger.info(f"Monte Carlo data: {len(uplift_values)} records for {tipologia}, palancas: {selected_palancas}")
+
+                return {
+                    'success': True,
+                    'uplift_values': uplift_values,
+                    'statistics': stats,
+                    'available_palancas': available_palancas,
+                    'count': len(uplift_values)
+                }
+
+        except Exception as e:
+            logger.error(f"Error in get_monte_carlo_data: {e}")
             return {
                 'success': False,
                 'error': str(e)

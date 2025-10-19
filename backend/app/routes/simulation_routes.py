@@ -171,3 +171,65 @@ def get_capex_fee():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@simulation_bp.route('/monte-carlo-data', methods=['GET'])
+def get_monte_carlo_data():
+    """
+    GET /api/simulation/monte-carlo-data?tipologia=Super%20e%20hiper&palancas=punta_de_gondola,metro_cuadrado
+    Get simulation data for Monte Carlo histogram
+
+    Query params:
+    - tipologia: Tipología name (Super e hiper, Conveniencia, Droguerías)
+    - palancas: Comma-separated list of palanca column names (optional)
+
+    Response:
+    {
+        "success": true,
+        "uplift_values": [0.15, 0.23, 0.18, ...],
+        "statistics": {
+            "media": 0.21,
+            "mediana": 0.20,
+            "p25": 0.15,
+            "p75": 0.28
+        },
+        "available_palancas": ["punta_de_gondola", "metro_cuadrado", ...],
+        "count": 15420
+    }
+    """
+    try:
+        tipologia = request.args.get('tipologia')
+        unidad = request.args.get('unidad', 'Cajas 8oz')  # Default to Cajas 8oz
+
+        if not tipologia:
+            return jsonify({
+                'success': False,
+                'error': 'Parámetro tipologia es requerido'
+            }), 400
+
+        # Parse optional palancas parameter
+        palancas_str = request.args.get('palancas', '')
+        selected_palancas = []
+        if palancas_str:
+            selected_palancas = [p.strip() for p in palancas_str.split(',') if p.strip()]
+
+        # Call database service
+        result = unified_db.get_monte_carlo_data(
+            tipologia=tipologia,
+            unidad=unidad,
+            selected_palancas=selected_palancas
+        )
+
+        if not result['success']:
+            return jsonify(result), 400
+
+        logger.info(f"✅ Monte Carlo data retrieved: {tipologia}, {result['count']} records, palancas={selected_palancas}")
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"❌ Error in get_monte_carlo_data endpoint: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

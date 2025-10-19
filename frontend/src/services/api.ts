@@ -514,6 +514,33 @@ class ApiService {
     params.append('palancas', palancas.join(','));
     return this.fetchApi(`/api/simulation/capex-fee?${params.toString()}`);
   }
+
+  // Get Monte Carlo simulation data for histogram
+  async getMonteCarloData(
+    tipologia: string,
+    unidad: string,
+    selectedPalancas: string[] = []
+  ): Promise<{
+    success: boolean;
+    uplift_values: number[];
+    statistics: {
+      media: number;
+      mediana: number;
+      p25: number;
+      p75: number;
+    };
+    available_palancas: string[];
+    count: number;
+    error?: string;
+  }> {
+    const params = new URLSearchParams();
+    params.append('tipologia', tipologia);
+    params.append('unidad', unidad);
+    if (selectedPalancas.length > 0) {
+      params.append('palancas', selectedPalancas.join(','));
+    }
+    return this.fetchApi(`/api/simulation/monte-carlo-data?${params.toString()}`);
+  }
 }
 
 export const apiService = new ApiService();

@@ -61,7 +61,7 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
             <Button
               variant="outline"
               onClick={onNavigateToResults}
-              className="flex items-center space-x-2 text-muted-foreground hover:!text-white hover:!bg-primary transition-colors"
+              className="flex items-center space-x-2 bg-orange-500/60 dark:bg-orange-600/50 text-white hover:!bg-primary transition-colors"
             >
               <MessageSquare className="h-4 w-4" />
               <span>Análisis</span>

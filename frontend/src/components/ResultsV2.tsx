@@ -229,7 +229,7 @@ export function Results({ userEmail, onBackToDashboard, onLogout }: ResultsProps
             <Button
               variant="outline"
               onClick={onBackToDashboard}
-              className="flex items-center space-x-2 text-muted-foreground hover:!text-white hover:!bg-primary transition-colors"
+              className="flex items-center space-x-2 bg-orange-500/60 dark:bg-orange-600/50 text-white hover:!bg-primary transition-colors"
             >
               <BarChart3 className="h-4 w-4" />
               <span>Dashboard</span>

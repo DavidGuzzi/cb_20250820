@@ -21,7 +21,7 @@ export function SimulationVisualization() {
                 onClick={() => setViewMode('personalizada')}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
                   viewMode === 'personalizada'
-                    ? 'bg-background text-foreground shadow-sm'
+                    ? 'bg-white dark:bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -31,11 +31,11 @@ export function SimulationVisualization() {
                 onClick={() => setViewMode('estudio')}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
                   viewMode === 'estudio'
-                    ? 'bg-background text-foreground shadow-sm'
+                    ? 'bg-white dark:bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Estudio
+                Estudio Monte Carlo
               </button>
             </div>
           </div>

@@ -98,6 +98,8 @@ npm run lint
 - `get_categorias_by_tipologia(tipologia)` → Returns categories filtered by tipologia with custom ordering
 - `get_dashboard_results(tipologia, fuente, unidad, categoria)` → Table data with multiple filters
 - `get_evolution_timeline_data(tipologia, fuente, unidad, categoria, palanca)` → Timeline data with palanca vs control, starts from first positive value
+  - **City-based control for Droguerías**: Control group filtered to same city as palanca stores
+  - **Sell Out marker adjustment**: Project start marker displays at period end date instead of start date
 - `get_radar_chart_data(tipologia, fuente, unidad, categoria)` → Aggregated data for radar charts (excludes categories 5, 6, 7)
 - `execute_query(sql_query)` → Text-to-SQL execution for chatbot
 - `get_schema_info()` → Schema description for LLM context
@@ -144,9 +146,9 @@ npm run lint
 - **SummaryCards.tsx**: Static summary cards (top-left sidebar)
 
 #### **Simulaciones Components:**
-- **SimulationVisualization.tsx**: Container with toggle between "Personalizada" and "Estudio" views
-- **SimulationPersonalizada.tsx**: Interactive 5-step simulation calculator
-- **SimulationEstudio.tsx**: Placeholder for future study simulations history
+- **SimulationVisualization.tsx**: Container with toggle between "Personalizada" and "Estudio Monte Carlo" views
+- **SimulationPersonalizada.tsx**: Interactive 7-step simulation calculator with OLS model predictions
+- **SimulationEstudio.tsx**: Monte Carlo histogram with uplift distribution analysis from simulation_result table
 
 #### **Table Structure (ExperimentTable):**
 - **Row Groups**: Combinations of `Source - Category` (e.g., "Sell In - Gatorade")
@@ -175,11 +177,18 @@ npm run lint
 #### **Timeline Chart (Evolución Temporal):**
 - **Dual Line Display**: Shows both palanca (treatment) and control group in same chart
 - **Smart Start Point**: Timeline automatically starts from the first positive value of the palanca (control adapts to same date range)
+- **City-Based Control for Droguerías**:
+  - **Droguerías**: Control line shows average of ONLY control stores from the same city as palanca stores
+  - **Other typologies** (Super e hiper, Conveniencia): Control line shows average of ALL control stores in the typology
 - **Project Start Marker**: Visual arrow with "Fecha inicio de Palanca" label marking project start date
   - Calculated as mode (most frequent date) from `store_master.start_date_sellin` or `start_date_sellout`
+  - **For Sell Out sources**: Marker displays at the END of the period containing the start date (e.g., if project starts 01/06, marker shows at 30/06)
+  - **For Sell In sources**: Marker displays at the start date directly
   - Color-coded to match tipología (blue, green, or orange)
   - Custom SVG arrow component for visibility
-- **Date Formatting**: X-axis displays dates in DD/MM format (e.g., "13/01", "20/01") instead of period labels
+- **Date Formatting**:
+  - **Sell Out sources** (Sell Out, Sell Out - SOM, Sell Out - SOM - HIDR): Abbreviated months in Spanish (e.g., "jun", "jul", "ago")
+  - **Sell In source**: DD/MM format (e.g., "13/01", "20/01")
 - **Color Coding**: Palanca line color matches selected tipología:
   - Super e hiper: Blue (#3b82f6)
   - Conveniencia: Green (#10b981)
@@ -262,9 +271,42 @@ The Analysis area now features a unified "Simulaciones" section replacing the pr
 - **State Management**: All form data maintained in `formData` state object
 - **Animation Positioning**: Overlay uses `absolute inset-0` relative to content area container for full coverage
 
-**SimulationEstudio:**
-- Placeholder component with "Coming Soon" message
-- Future feature: History of saved simulations and detailed study analysis
+**SimulationEstudio (Estudio Monte Carlo):**
+Interactive histogram visualization showing uplift distribution from simulation_result table.
+
+**Layout:**
+- **Header**: Title + 3 tipología selection buttons (Super e hiper, Conveniencia, Droguerías)
+- **Main Area (2 columns)**:
+  - **Left (70%)**: Histogram chart with Recharts
+    - 30 bins showing frequency distribution of uplift values
+    - Bars colored by selected tipología (blue/green/orange)
+    - **4 vertical reference lines** traversing the chart:
+      - **P25** (orange dashed): "Conservador" - 25th percentile
+      - **Mediana** (green solid): "Esperado" - Median value
+      - **Media** (blue solid): "Esperado" - Mean value
+      - **P75** (green dashed): "Optimista" - 75th percentile
+    - Dynamic title showing tipología and record count
+  - **Right (30%)**: Palanca filter panel
+    - Checkboxes for multi-selection
+    - Available palancas loaded dynamically per tipología
+    - "Limpiar selección" button to reset filters
+
+**Data Filtering:**
+- **Base filters**: Always applies `planograma_ejecución_check = 1 AND precios_check = 1 AND carga_check = 1`
+- **Conveniencia exception**: Excludes records with `vol_inicial = 15`
+- **Palanca filtering**: AND logic (all selected palancas must be active = 1)
+- **Dynamic reload**: Chart updates automatically when tipología or palancas change
+
+**Palancas por Tipología:**
+- **Super e hiper**: Punta de góndola, Metro cuadrado, Nevera en punto de pago, Rompe tráfico cross category
+- **Conveniencia**: Punta de góndola, Mini vallas en fachada, Cajero vendedor, Nevera en punto de pago
+- **Droguerías**: Exhibición adicional mamut, Nevera en punto de pago, Entrepaño con comunicación, Cajero vendedor, Tienda multipalanca
+
+**Technical Details:**
+- Uses `/api/simulation/monte-carlo-data` endpoint
+- Real-time statistics calculation (media, mediana, p25, p75) with pandas
+- Histogram bins automatically calculated based on data range
+- Loading/error/empty states for better UX
 
 ### Data Layer
 - **PostgreSQL Database**: Unified data source for both Dashboard and Chatbot
@@ -272,7 +314,7 @@ The Analysis area now features a unified "Simulaciones" section replacing the pr
 - **11 master tables + 3 OLS params tables + 2 fact tables**: Normalized schema for scalability
 - **Text-to-SQL**: Natural language queries executed on PostgreSQL
 - **Real-time analytics**: Cache performance and session metrics
-- **1,085,078+ records**: Including 1M+ simulation results, experiments, stores, periods, audits, and OLS model coefficients
+- **171,117 records**: Including 130K+ filtered simulation results (only valid with all 3 checks = 1), experiments, stores, periods, audits, and OLS model coefficients
 
 ## Development Workflow
 
@@ -449,7 +491,7 @@ The chatbot interface has been significantly improved for better user experience
   - `data_source_master`: Data sources (Sell In, Sell Out, Sell Out - SOM, etc.)
   - `period_master`: Time periods with start/end dates
   - `store_master`: 225 stores with city, typology, and lever assignments
-  - `audit_master`: 2,082 audit records tracking store visits (columns: week, date, hour, store_code_sellin)
+  - `audit_master`: 1,905 audit records tracking store visits (columns: week, date, hour, store_code_sellin)
 
 - **3 OLS Model Parameter Tables** (for simulations):
   - `ols_params_drogas`: 16 coefficients for Droguerías typology OLS model
@@ -501,7 +543,7 @@ python backend/scripts/migrate_excel_to_postgres.py --truncate --parquet custom_
 **Important notes:**
 - **`migrate_excel_to_postgres.py`**: Loads data from Excel/Parquet into PostgreSQL (development tool)
 - **`pg_dump`**: Generates SQL dump for Cloud Run deployment (uses PostgreSQL COPY format, much faster than INSERT)
-- **`init_complete.sql`**: Complete database snapshot used by Cloud Run (127 MB, 1.08M+ lines, 1.08M+ records)
+- **`init_complete.sql`**: Complete database snapshot used by Cloud Run (19 MB, 171K+ records - filtered simulation_result with only valid checks)
 
 ### Database Access
 ```bash
@@ -571,7 +613,7 @@ PORT=8080
 **Self-Contained Backend with Embedded PostgreSQL:**
 - Backend container includes PostgreSQL server running on `localhost:5432`
 - Database initialized automatically on container startup with full UTF-8 encoding
-- **127 MB SQL dump** with schema + **1.08M+ rows** loaded at startup
+- **19 MB SQL dump** with schema + **171K+ rows** loaded at startup (optimized with filtered simulation results)
 - Ideal for static A/B testing data (no external Cloud SQL needed = $0 cost)
 - Container restarts reload data from dump (stateless design)
 
@@ -650,7 +692,7 @@ ls -lh backend/database/init_complete.sql
 ### Key Files for Cloud Run:
 - **`backend/Dockerfile.cloudrun`** - Multi-stage Dockerfile with PostgreSQL
 - **`backend/docker-entrypoint.sh`** - Initialization script (PostgreSQL + Flask)
-- **`backend/database/init_complete.sql`** - Complete database dump (127 MB, 1.08M+ records)
+- **`backend/database/init_complete.sql`** - Complete database dump (19 MB, 171K+ records)
 - **`backend/.gcloudignore`** - Excludes unnecessary files from build
 
 ### Troubleshooting:
@@ -671,6 +713,72 @@ gcloud run logs tail retail-backend --region=us-central1 | grep -i "utf\|ascii\|
 ---
 
 ## Recent Updates
+
+### 2025-10-18: Estudio Monte Carlo - Interactive Histogram Visualization
+**New Feature - Monte Carlo Simulation Analysis:**
+Implemented interactive histogram visualization for analyzing uplift distribution from simulation_result table.
+
+**Backend Changes:**
+- **New Method**: `UnifiedDatabaseService.get_monte_carlo_data()`
+  - Fetches uplift values from simulation_result filtered by tipología
+  - Applies quality filters: `planograma_ejecución_check = 1 AND precios_check = 1 AND carga_check = 1`
+  - Excludes `vol_inicial = 15` for Conveniencia
+  - Supports multi-palanca filtering with AND logic
+  - Calculates real-time statistics: media, mediana, p25, p75 using pandas
+- **New Endpoint**: `GET /api/simulation/monte-carlo-data`
+  - Query params: `tipologia` (required), `palancas` (optional, comma-separated)
+  - Returns: uplift_values array, statistics object, available_palancas, count
+
+**Frontend Changes:**
+- **SimulationEstudio.tsx**: Complete rewrite from placeholder to functional component
+  - **3 tipología buttons** (Super e hiper, Conveniencia, Droguerías) with selection state
+  - **Histogram (70% width)**: 30-bin frequency distribution with Recharts
+    - Bars colored by selected tipología (blue/green/orange)
+    - **4 vertical reference lines**: P25 (conservador), Mediana (esperado), Media (esperado), P75 (optimista)
+    - Dynamic labels showing percentage values + interpretation
+  - **Palanca filter panel (30% width)**: Checkboxes for multi-selection
+    - Available palancas loaded dynamically per tipología
+    - "Limpiar selección" button to reset filters
+  - **Auto-reload**: Chart updates when tipología or palancas change
+  - **States**: Loading spinner, error message, empty state
+- **API Service**: Added `getMonteCarloData()` method to `services/api.ts`
+
+**Palanca Mapping:**
+- **Super e hiper**: punta_de_gondola, metro_cuadrado, nevera_en_punto_de_pago, rompe_trafico_cross_category
+- **Conveniencia**: punta_de_gondola, mini_vallas_en_fachada, cajero_vendedor, nevera_en_punto_de_pago
+- **Droguerías**: exhibicion_adicional_mamut, nevera_en_punto_de_pago, entrepano_con_comunicacion, cajero_vendedor, tienda_multipalanca
+
+**Files Modified:**
+- `backend/app/services/unified_database_service.py`: Added get_monte_carlo_data method (130 lines)
+- `backend/app/routes/simulation_routes.py`: Added /monte-carlo-data endpoint
+- `frontend/src/components/SimulationEstudio.tsx`: Replaced placeholder with full implementation (318 lines)
+- `frontend/src/services/api.ts`: Added getMonteCarloData API method
+- `CLAUDE.md`: Updated documentation with Monte Carlo feature
+
+### 2025-10-18: Database Optimization - Filtered Simulation Results
+**Data Quality & Performance Improvements:**
+- **store_master Updated**: Refreshed with latest data from `app_db_20251016_1007.xlsx` (225 stores)
+- **simulation_result Filtered**: Applied quality filters to keep only valid simulation records
+  - **Filter criteria**: `planograma_ejecución_check = 1 AND precios_check = 1 AND carga_check = 1`
+  - **Before**: 1,044,480 records (all simulations)
+  - **After**: 130,560 records (12.5% - only valid simulations)
+  - **Reduction**: 913,920 invalid records removed (~87.5%)
+- **audit_master Updated**: Reduced from 2,082 to 1,905 records (corrected data from Excel)
+- **SQL Dump Optimized**:
+  - **Before**: 127 MB (1.08M+ records)
+  - **After**: 19 MB (171K+ records)
+  - **Improvement**: 85% size reduction for faster Cloud Run deployments
+
+**Technical Details:**
+- Updated migration workflow to apply filter at load time (reads Parquet → filters → inserts only valid records)
+- Modified `backend/database/init_complete.sql` with optimized data
+- Total database size: **171,117 records** across 17 tables
+- Benefits: Faster deployments, cleaner data for analysis, reduced storage costs
+
+**Impact on Features:**
+- ✅ Dashboard and Chatbot now query only high-quality simulation results
+- ✅ Cloud Run container initialization improved (~85% faster data loading)
+- ✅ All existing functionality preserved with better data quality
 
 ### 2025-10-17: SimulationPersonalizada UX Enhancements
 **Frontend Improvements:**
@@ -706,7 +814,7 @@ gcloud run logs tail retail-backend --region=us-central1 | grep -i "utf\|ascii\|
 - **Updated Table**: `audit_master` restructured for better data integrity
   - Removed `typology_id` and `cod_pdv` columns (old structure)
   - Now uses `store_code_sellin` to link directly with `store_master`
-  - **2,082 audit records** with simplified structure: week, date, hour, store_code_sellin
+  - **1,905 audit records** with simplified structure: week, date, hour, store_code_sellin
   - Source data from `app_db_20251016_1007.xlsx` (audit_master sheet)
 
 - **New Tables**: 3 OLS model parameter tables for simulation calculations
@@ -730,7 +838,7 @@ gcloud run logs tail retail-backend --region=us-central1 | grep -i "utf\|ascii\|
   - Added mounts for `df_drg_params.xlsx`, `df_cnv_params.xlsx`, `df_seh_params.xlsx`
   - Updated main Excel file mount to `app_db_20251016_1007.xlsx`
 
-- **Total Records**: Now **1,085,078+ records** (2,082 audit + 48 OLS coefficients + 1,044,480 simulation results + 38,468 other records)
+- **Total Records**: Now **171,117 records** (1,905 audit + 48 OLS coefficients + 130,560 filtered simulation results + 38,604 other records)
 
 **Use Case:**
 These OLS parameter tables will be used by the SimulationPersonalizada component to calculate real uplift predictions based on the actual regression model coefficients for each typology.
