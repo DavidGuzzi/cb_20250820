@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Checkbox } from './ui/checkbox';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { ChevronDown } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -9,6 +13,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { apiService } from '../services/api';
+import { useAppState } from '../contexts/AppStateContext';
 
 // Mapeo de nombres legibles a nombres de columna en DB
 const PALANCA_LABELS: Record<string, string> = {
@@ -43,12 +48,12 @@ interface MonteCarloData {
 }
 
 export function SimulationEstudio() {
-  const [selectedTipologia, setSelectedTipologia] = useState<string>('Super e hiper');
-  const [selectedUnidad, setSelectedUnidad] = useState<string>('Cajas 8oz');
-  const [selectedPalancas, setSelectedPalancas] = useState<string[]>([]);
+  const { analysisState, setMonteCarloState } = useAppState();
+  const { selectedTipologia, selectedUnidad, selectedPalancas } = analysisState.monteCarloState;
   const [data, setData] = useState<MonteCarloData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [popoverOpen, setPopoverOpen] = useState(false);
 
   // Fetch data whenever tipologia, unidad, or selected palancas change
   useEffect(() => {
@@ -81,11 +86,11 @@ export function SimulationEstudio() {
   };
 
   const togglePalanca = (palanca: string) => {
-    setSelectedPalancas(prev =>
-      prev.includes(palanca)
-        ? prev.filter(p => p !== palanca)
-        : [...prev, palanca]
-    );
+    setMonteCarloState({
+      selectedPalancas: selectedPalancas.includes(palanca)
+        ? selectedPalancas.filter(p => p !== palanca)
+        : [...selectedPalancas, palanca]
+    });
   };
 
   // Prepare histogram data (create bins)
@@ -125,17 +130,27 @@ export function SimulationEstudio() {
     return value >= 0 ? 'text-green-600' : 'text-red-600';
   };
 
+  // Helper function to format selected palancas for title
+  const formatPalancasForTitle = (palancas: string[]): string => {
+    if (palancas.length === 0) return '';
+    const labels = palancas.map(p => PALANCA_LABELS[p] || p);
+    if (labels.length === 1) return labels[0];
+    if (labels.length === 2) return `${labels[0]} y ${labels[1]}`;
+    const lastIndex = labels.length - 1;
+    return labels.slice(0, lastIndex).join(', ') + ', y ' + labels[lastIndex];
+  };
+
   return (
     <div className="h-full flex flex-col p-6 gap-4">
-      {/* Header con botones de tipología y unidad */}
+      {/* Header con botones de tipología, unidad y palancas */}
       <div className="flex items-start gap-8">
         {/* Grupo: Selecciona Tipología */}
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-2">Selecciona Tipología</p>
-          <div className="flex gap-3">
-            {['Super e hiper', 'Conveniencia', 'Droguerías'].map((tip) => {
+          <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 gap-1">
+            {(['Super e hiper', 'Conveniencia', 'Droguerías'] as const).map((tip) => {
               const isSelected = selectedTipologia === tip;
-              const colors = {
+              const colors: Record<typeof tip, string> = {
                 'Super e hiper': 'from-blue-500 to-blue-600',
                 'Conveniencia': 'from-green-500 to-green-600',
                 'Droguerías': 'from-orange-500 to-orange-600'
@@ -144,13 +159,15 @@ export function SimulationEstudio() {
                 <button
                   key={tip}
                   onClick={() => {
-                    setSelectedTipologia(tip);
-                    setSelectedPalancas([]); // Reset palancas on tipologia change
+                    setMonteCarloState({
+                      selectedTipologia: tip,
+                      selectedPalancas: [] // Reset palancas on tipologia change
+                    });
                   }}
-                  className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                  className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
                     isSelected
-                      ? `bg-gradient-to-r ${colors[tip]} text-white shadow-lg scale-105`
-                      : 'bg-card text-muted-foreground hover:bg-muted border border-border'
+                      ? `bg-gradient-to-r ${colors[tip]} text-white shadow-sm`
+                      : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {tip}
@@ -164,19 +181,16 @@ export function SimulationEstudio() {
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-2">Selecciona Unidad de Medida</p>
           <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1">
-            {['Cajas 8oz', 'Ventas'].map((unidad, index) => {
+            {['Cajas 8oz', 'Ventas'].map((unidad) => {
               const isSelected = selectedUnidad === unidad;
-              const gradientColors = index === 0
-                ? 'from-blue-600 to-blue-700'
-                : 'from-cyan-600 to-cyan-700';
 
               return (
                 <button
                   key={unidad}
-                  onClick={() => setSelectedUnidad(unidad)}
+                  onClick={() => setMonteCarloState({ selectedUnidad: unidad })}
                   className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
                     isSelected
-                      ? `bg-gradient-to-r ${gradientColors} text-white shadow-sm`
+                      ? 'bg-gray-800 text-white shadow-sm dark:bg-gray-900'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
@@ -186,17 +200,81 @@ export function SimulationEstudio() {
             })}
           </div>
         </div>
+
+        {/* Grupo: Selecciona Palancas (Multi-select) */}
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-2">Filtrar por Palancas</p>
+          <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-[280px] justify-between text-xs"
+                disabled={!data?.available_palancas || data.available_palancas.length === 0}
+              >
+                <span className="truncate">
+                  {selectedPalancas.length === 0
+                    ? 'Seleccionar palancas...'
+                    : `${selectedPalancas.length} palanca(s) seleccionada(s)`}
+                </span>
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[280px] p-0" align="start">
+              <div className="p-4 space-y-2 max-h-[300px] overflow-y-auto">
+                {data?.available_palancas && data.available_palancas.length > 0 ? (
+                  <>
+                    {data.available_palancas.map((palanca) => (
+                      <div
+                        key={palanca}
+                        className="flex items-center space-x-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md cursor-pointer transition-colors"
+                        onClick={() => togglePalanca(palanca)}
+                      >
+                        <Checkbox
+                          id={`palanca-${palanca}`}
+                          checked={selectedPalancas.includes(palanca)}
+                          onCheckedChange={() => togglePalanca(palanca)}
+                        />
+                        <label
+                          htmlFor={`palanca-${palanca}`}
+                          className="text-sm text-foreground cursor-pointer select-none flex-1"
+                        >
+                          {PALANCA_LABELS[palanca] || palanca}
+                        </label>
+                      </div>
+                    ))}
+
+                    {selectedPalancas.length > 0 && (
+                      <div className="pt-2 border-t border-border">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setMonteCarloState({ selectedPalancas: [] })}
+                          className="w-full text-xs"
+                        >
+                          Limpiar selección
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="p-2 text-center text-sm text-muted-foreground">
+                    No hay palancas disponibles
+                  </div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
-      {/* Main content: Histogram (left) + Stats/Palancas (right) */}
+      {/* Main content: Histogram (left) + Stats (right centered) */}
       <div className="flex-1 flex gap-4 min-h-0">
         {/* Left: Histogram */}
         <div className="flex-[7] p-4 flex flex-col bg-card rounded-lg">
           {selectedPalancas.length === 0 ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
-                <p className="text-lg font-medium text-muted-foreground mb-2">Selecciona al menos una palanca</p>
-                <p className="text-sm text-muted-foreground">Usa el panel de la derecha para filtrar por palancas →</p>
+                <p className="text-lg font-medium text-muted-foreground">Selecciona al menos una palanca en filtro de arriba</p>
               </div>
             </div>
           ) : loading ? (
@@ -223,6 +301,11 @@ export function SimulationEstudio() {
                 <h4 className="text-sm font-semibold text-foreground">
                   Distribución de Uplift (%) - {selectedTipologia}
                 </h4>
+                {selectedPalancas.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Palancas seleccionadas: {formatPalancasForTitle(selectedPalancas)}
+                  </p>
+                )}
               </div>
 
               <div className="flex-1">
@@ -249,71 +332,36 @@ export function SimulationEstudio() {
           )}
         </div>
 
-        {/* Right: Palancas arriba + Stats abajo - Aligned to graph height */}
-        <div className="flex-[3] flex flex-col gap-4" style={{ paddingTop: '52px' }}>
-          {/* Palancas selector - ARRIBA */}
-          <div className="flex-1 p-4 bg-card rounded-lg overflow-y-auto">
-            <div className="mb-3">
-              <h4 className="text-sm font-semibold text-foreground">Filtrar por Palancas</h4>
-            </div>
-
-            <div className="space-y-2">
-              {data?.available_palancas.map((palanca) => (
-                <div key={palanca} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={palanca}
-                    checked={selectedPalancas.includes(palanca)}
-                    onCheckedChange={() => togglePalanca(palanca)}
-                  />
-                  <label
-                    htmlFor={palanca}
-                    className="text-sm text-foreground cursor-pointer select-none"
-                  >
-                    {PALANCA_LABELS[palanca] || palanca}
-                  </label>
-                </div>
-              ))}
-            </div>
-
-            {selectedPalancas.length > 0 && (
-              <div className="mt-4 p-3 bg-primary/10 rounded-md border border-primary/20">
-                <p className="text-xs font-medium text-primary">
-                  {selectedPalancas.length} palanca(s) seleccionada(s)
-                </p>
-                <button
-                  onClick={() => setSelectedPalancas([])}
-                  className="mt-2 text-xs text-primary hover:underline"
-                >
-                  Limpiar selección
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Tabla de estadísticas - ABAJO */}
+        {/* Right: Stats card (centered vertically) */}
+        <div className="flex-[3] flex items-center justify-center">
           {data && data.count > 0 && selectedPalancas.length > 0 && (
-            <div className="p-4 bg-card rounded-lg">
-              <div className="space-y-3">
-                <div className="text-center py-2 border-b border-border">
-                  <p className="text-xs text-muted-foreground mb-1">Conservador</p>
-                  <p className={`text-xl font-bold ${getValueColor(data.statistics.p25)}`}>
-                    {(data.statistics.p25 * 100).toFixed(1)}%
-                  </p>
+            <Card className="w-full max-w-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">Resumen de uplifts esperados</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="text-center py-2 border-b border-border">
+                    <p className="text-xs text-muted-foreground mb-1">Conservador</p>
+                    <p className={`text-xl font-bold ${getValueColor(data.statistics.p25)}`}>
+                      {(data.statistics.p25 * 100).toFixed(1)}%
+                    </p>
+                  </div>
+                  <div className="text-center py-2 border-b border-border">
+                    <p className="text-xs text-muted-foreground mb-1">Valor Esperado</p>
+                    <p className={`text-xl font-bold ${getValueColor(data.statistics.mediana)}`}>
+                      {(data.statistics.mediana * 100).toFixed(1)}%
+                    </p>
+                  </div>
+                  <div className="text-center py-2">
+                    <p className="text-xs text-muted-foreground mb-1">Optimista</p>
+                    <p className={`text-xl font-bold ${getValueColor(data.statistics.p75)}`}>
+                      {(data.statistics.p75 * 100).toFixed(1)}%
+                    </p>
+                  </div>
                 </div>
-                <div className="text-center py-2 border-b border-border">
-                  <p className="text-xs text-muted-foreground mb-1">Valor Esperado</p>
-                  <p className={`text-xl font-bold ${getValueColor(data.statistics.mediana)}`}>
-                    {(data.statistics.mediana * 100).toFixed(1)}%
-                  </p>
-                </div>
-                <div className="text-center py-2">
-                  <p className="text-xs text-muted-foreground mb-1">Optimista</p>
-                  <p className={`text-xl font-bold ${getValueColor(data.statistics.p75)}`}>
-                    {(data.statistics.p75 * 100).toFixed(1)}%
-                  </p>
-                </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           )}
         </div>
       </div>

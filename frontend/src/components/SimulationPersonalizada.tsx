@@ -24,6 +24,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { apiService } from '../services/api';
+import { useAppState } from '../contexts/AppStateContext';
 
 // Tipos
 type Tipologia = 'Super e hiper' | 'Conveniencia' | 'Droguerías' | '';
@@ -193,7 +194,14 @@ function SelectionBreadcrumb({
 }
 
 export function SimulationPersonalizada() {
-  const [currentStep, setCurrentStep] = useState<number>(1);
+  const { analysisState, setSimulationFormData } = useAppState();
+
+  // Use global state for form data and currentStep
+  const formData = analysisState.simulationFormData;
+  const currentStep = formData.currentStep;
+  const results = formData.results || { uplift: 0, roi: 0, payback: 0 };
+
+  // Local state for UI-only concerns
   const [isCalculating, setIsCalculating] = useState(false);
   const [calculationProgress, setCalculationProgress] = useState(0);
   const [calculationMessage, setCalculationMessage] = useState('');
@@ -205,29 +213,19 @@ export function SimulationPersonalizada() {
   const [totalFeeUsd, setTotalFeeUsd] = useState<number>(0);
   const [error, setError] = useState<string>('');
 
-  const [formData, setFormData] = useState<FormData>({
-    tipologia: '',
-    tipoPalanca: '',
-    palancasSeleccionadas: [],
-    tamanoTienda: '',
-    features: {
-      frentesPropios: 4,
-      frentesCompetencia: 6,
-      skuPropios: 12,
-      skuCompetencia: 18,
-      equiposFrioPropios: 1,
-      equiposFrioCompetencia: 2,
-      puertasPropias: 2,
-      puertasCompetencia: 3
-    },
-    exchangeRate: 3912, // Default TRM
-    maco: 35
-  });
-  const [results, setResults] = useState<Results>({
-    uplift: 0,
-    roi: 0,
-    payback: 0
-  });
+  // Helper function to update form data
+  const updateFormData = (updates: Partial<typeof formData>) => {
+    setSimulationFormData(updates);
+  };
+
+  // Helper function to update results
+  const setResults = (results: Results) => {
+    setSimulationFormData({ results });
+  };
+
+  const setCurrentStep = (step: number) => {
+    setSimulationFormData({ currentStep: step });
+  };
 
   // Load palancas when tipologia changes
   useEffect(() => {
@@ -250,7 +248,14 @@ export function SimulationPersonalizada() {
     try {
       const response = await apiService.getPalancasByTipologia(formData.tipologia);
       if (response.success) {
-        setAvailablePalancas(response.palancas);
+        let palancas = response.palancas;
+
+        // Filter out "Cajero vendedor" for Droguerías in simulation section only
+        if (formData.tipologia === 'Droguerías') {
+          palancas = palancas.filter(p => p !== 'Cajero vendedor');
+        }
+
+        setAvailablePalancas(palancas);
       } else {
         setError('Error al cargar palancas');
       }
@@ -344,10 +349,11 @@ export function SimulationPersonalizada() {
     }
 
     if (currentStep > 6) {
+      const totalInversion = (totalCapexUsd + totalFeeUsd) * formData.exchangeRate;
       items.push({
         icon: Wallet,
         label: 'Financieros',
-        value: `${(formData.inversion / 1000000).toFixed(0)}M COP, ${formData.maco}%`,
+        value: `${(totalInversion / 1000000).toFixed(0)}M COP, ${formData.maco}%`,
         variant: 'outline',
         step: 6
       });
@@ -473,7 +479,7 @@ export function SimulationPersonalizada() {
       calculateResults();
     } else if (canContinue()) {
       // Avanzar al siguiente paso
-      setCurrentStep(prev => prev + 1);
+      setCurrentStep(currentStep + 1);
     }
   };
 
@@ -482,7 +488,57 @@ export function SimulationPersonalizada() {
       // Si ya calculó, volver a paso 6
       setCurrentStep(6);
     } else if (currentStep > 1) {
-      setCurrentStep(prev => prev - 1);
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  // Helper to get default feature values based on tipologia
+  const getDefaultFeatures = (tipologia: Tipologia) => {
+    switch (tipologia) {
+      case 'Super e hiper':
+        return {
+          frentesPropios: 50,
+          frentesCompetencia: 70,
+          skuPropios: 10,
+          skuCompetencia: 10,
+          equiposFrioPropios: 1,
+          equiposFrioCompetencia: 1,
+          puertasPropias: 2,
+          puertasCompetencia: 2
+        };
+      case 'Conveniencia':
+        return {
+          frentesPropios: 20,
+          frentesCompetencia: 30,
+          skuPropios: 5,
+          skuCompetencia: 5,
+          equiposFrioPropios: 0, // Not used for Conveniencia
+          equiposFrioCompetencia: 0, // Not used for Conveniencia
+          puertasPropias: 1,
+          puertasCompetencia: 1
+        };
+      case 'Droguerías':
+        return {
+          frentesPropios: 15,
+          frentesCompetencia: 50,
+          skuPropios: 5,
+          skuCompetencia: 10,
+          equiposFrioPropios: 0, // Not used for Droguerías
+          equiposFrioCompetencia: 0, // Not used for Droguerías
+          puertasPropias: 1,
+          puertasCompetencia: 1
+        };
+      default:
+        return {
+          frentesPropios: 0,
+          frentesCompetencia: 0,
+          skuPropios: 0,
+          skuCompetencia: 0,
+          equiposFrioPropios: 0,
+          equiposFrioCompetencia: 0,
+          puertasPropias: 0,
+          puertasCompetencia: 0
+        };
     }
   };
 
@@ -491,20 +547,20 @@ export function SimulationPersonalizada() {
     setIsCalculating(false);
     setError('');
     setCapexBreakdown([]);
-    setFormData({
+    updateFormData({
       tipologia: '',
       tipoPalanca: '',
       palancasSeleccionadas: [],
       tamanoTienda: '',
       features: {
-        frentesPropios: 4,
-        frentesCompetencia: 6,
-        skuPropios: 12,
-        skuCompetencia: 18,
-        equiposFrioPropios: 1,
-        equiposFrioCompetencia: 2,
-        puertasPropias: 2,
-        puertasCompetencia: 3
+        frentesPropios: 0,
+        frentesCompetencia: 0,
+        skuPropios: 0,
+        skuCompetencia: 0,
+        equiposFrioPropios: 0,
+        equiposFrioCompetencia: 0,
+        puertasPropias: 0,
+        puertasCompetencia: 0
       },
       exchangeRate: 3912,
       maco: 35
@@ -522,16 +578,16 @@ export function SimulationPersonalizada() {
 
   const togglePalanca = (palanca: string) => {
     if (formData.tipoPalanca === 'simple') {
-      setFormData({ ...formData, palancasSeleccionadas: [palanca] });
+      updateFormData({ ...formData, palancasSeleccionadas: [palanca] });
     } else {
       const isSelected = formData.palancasSeleccionadas.includes(palanca);
       if (isSelected) {
-        setFormData({
+        updateFormData({
           ...formData,
           palancasSeleccionadas: formData.palancasSeleccionadas.filter(p => p !== palanca)
         });
       } else {
-        setFormData({
+        updateFormData({
           ...formData,
           palancasSeleccionadas: [...formData.palancasSeleccionadas, palanca]
         });
@@ -546,8 +602,8 @@ export function SimulationPersonalizada() {
         <SelectionBreadcrumb items={getBreadcrumbItems()} onItemClick={handleBreadcrumbClick} />
 
       {/* Content area */}
-      <div className="flex-1 overflow-hidden p-6 relative">
-        <div className="relative h-full flex items-center justify-center">
+      <div className="flex-1 p-2 sm:p-6 relative overflow-auto">
+        <div className={`relative w-full h-full flex justify-center ${currentStep === 7 ? 'items-start py-2 sm:py-4' : 'items-center'}`}>
           {/* Paso 1: Tipología */}
           {currentStep === 1 && (
             <div className="animate-in fade-in duration-500">
@@ -561,14 +617,26 @@ export function SimulationPersonalizada() {
                 <CardContent>
                   <RadioGroup
                     value={formData.tipologia}
-                    onValueChange={(value) => setFormData({ ...formData, tipologia: value as Tipologia })}
+                    onValueChange={(value) => {
+                      const tipologia = value as Tipologia;
+                      // Reset all subsequent steps when tipologia changes
+                      updateFormData({
+                        tipologia,
+                        tipoPalanca: '',
+                        palancasSeleccionadas: [],
+                        tamanoTienda: '',
+                        features: getDefaultFeatures(tipologia),
+                        exchangeRate: formData.exchangeRate,
+                        maco: formData.maco
+                      });
+                    }}
                   >
                     <div className="space-y-3">
                       {TIPOLOGIAS.map((tip) => (
                         <Label
                           key={tip}
                           htmlFor={`tip-${tip}`}
-                          className="flex items-center space-x-3 p-5 border border-border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                          className="flex items-center space-x-3 p-5 border-2 border-border hover:border-primary/50 hover:bg-muted/70 transition-all cursor-pointer rounded-lg"
                         >
                           <RadioGroupItem value={tip} id={`tip-${tip}`} />
                           <span className="flex-1 text-base">
@@ -597,7 +665,7 @@ export function SimulationPersonalizada() {
                   <RadioGroup
                     value={formData.tipoPalanca}
                     onValueChange={(value) => {
-                      setFormData({
+                      updateFormData({
                         ...formData,
                         tipoPalanca: value as TipoPalanca,
                         palancasSeleccionadas: []
@@ -605,14 +673,14 @@ export function SimulationPersonalizada() {
                     }}
                   >
                     <div className="space-y-3">
-                      <Label htmlFor="simple" className="flex items-center space-x-3 p-5 border border-border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
+                      <Label htmlFor="simple" className="flex items-center space-x-3 p-5 border-2 border-border rounded-lg bg-blue-50 dark:bg-blue-950/20 hover:border-primary hover:bg-primary/10 cursor-pointer transition-all">
                         <RadioGroupItem value="simple" id="simple" />
                         <div className="flex-1">
                           <div className="font-medium">Simple</div>
                           <div className="text-xs text-muted-foreground">Una palanca</div>
                         </div>
                       </Label>
-                      <Label htmlFor="multiple" className="flex items-center space-x-3 p-5 border border-border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
+                      <Label htmlFor="multiple" className="flex items-center space-x-3 p-5 border-2 border-border rounded-lg bg-green-50 dark:bg-green-950/20 hover:border-primary hover:bg-primary/10 cursor-pointer transition-all">
                         <RadioGroupItem value="multiple" id="multiple" />
                         <div className="flex-1">
                           <div className="font-medium">Múltiple</div>
@@ -650,10 +718,10 @@ export function SimulationPersonalizada() {
                         {availablePalancas.map((palanca) => (
                           <div
                             key={palanca}
-                            className={`flex items-center space-x-2 p-2 border rounded-lg cursor-pointer transition-colors text-sm ${
+                            className={`flex items-center space-x-2 p-2 border-2 rounded-lg cursor-pointer transition-all text-sm ${
                               formData.palancasSeleccionadas.includes(palanca)
-                                ? 'border-primary bg-primary/5'
-                                : 'border-border hover:bg-muted/50'
+                                ? 'border-primary bg-primary/10 dark:bg-primary/5'
+                                : 'border-border hover:border-primary/30 hover:bg-muted/70'
                             }`}
                             onClick={() => togglePalanca(palanca)}
                           >
@@ -684,23 +752,23 @@ export function SimulationPersonalizada() {
                 <CardContent>
                   <RadioGroup
                     value={formData.tamanoTienda}
-                    onValueChange={(value) => setFormData({ ...formData, tamanoTienda: value as TamanoTienda })}
+                    onValueChange={(value) => updateFormData({ ...formData, tamanoTienda: value as TamanoTienda })}
                   >
                     <div className="space-y-3">
                       {(['Pequeño', 'Mediano', 'Grande'] as TamanoTienda[]).map((tamano) => {
                         const disabled = isTamanoDisabled(tamano);
-                        const description = formData.tipologia ? STORE_SIZE_DESCRIPTIONS[formData.tipologia][tamano] : '';
+                        const description = formData.tipologia ? STORE_SIZE_DESCRIPTIONS[formData.tipologia as Tipologia][tamano] : '';
 
                         return (
                           <Tooltip key={tamano}>
                             <TooltipTrigger asChild>
                               <div
-                                className={`flex items-center space-x-3 p-5 border rounded-lg transition-colors ${
+                                className={`flex items-center space-x-3 p-5 border-2 rounded-lg transition-all ${
                                   disabled
-                                    ? 'opacity-50 cursor-not-allowed bg-muted/30'
-                                    : 'border-border hover:bg-muted/50 cursor-pointer'
+                                    ? 'opacity-50 cursor-not-allowed bg-muted/30 border-border'
+                                    : 'border-border hover:border-primary/50 hover:bg-muted/70 cursor-pointer'
                                 }`}
-                                onClick={() => !disabled && setFormData({ ...formData, tamanoTienda: tamano })}
+                                onClick={() => !disabled && updateFormData({ ...formData, tamanoTienda: tamano })}
                               >
                                 <RadioGroupItem value={tamano} id={`tam-${tamano}`} disabled={disabled} />
                                 <Label htmlFor={`tam-${tamano}`} className="flex-1 cursor-pointer">
@@ -737,7 +805,7 @@ export function SimulationPersonalizada() {
                   </CardTitle>
 
                   {/* Banner informativo */}
-                  <div className="flex items-start space-x-2 mt-3 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <div className="flex items-start space-x-2 mt-3 p-3 bg-blue-50 dark:bg-blue-950/30 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
                     <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
                     <p className="text-xs text-blue-700 dark:text-blue-300">
                       Los valores precargados son recomendaciones basadas en promedios observados en tiendas similares
@@ -746,32 +814,20 @@ export function SimulationPersonalizada() {
                 </CardHeader>
                 <CardContent className="max-h-[calc(100vh-350px)] overflow-y-auto">
                   {/* Tabla minimalista */}
-                  <div className="border border-border rounded-lg overflow-hidden">
+                  <div className="border-2 border-border rounded-lg overflow-hidden bg-card">
                     <table className="w-full">
-                      <thead className="bg-muted/50">
+                      <thead className="bg-muted/70 dark:bg-muted/50">
                         <tr>
-                          <th className="text-left p-3 text-sm font-semibold">Feature</th>
-                          <th className="text-center p-3 text-sm font-semibold">Propios</th>
-                          <th className="text-center p-3 text-sm font-semibold">Competencia</th>
+                          <th className="text-left p-3 text-sm font-semibold border-b-2 border-border">Feature</th>
+                          <th className="text-center p-3 text-sm font-semibold border-b-2 border-border">Propios</th>
+                          <th className="text-center p-3 text-sm font-semibold border-b-2 border-border">Competencia</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-border">
+                      <tbody className="divide-y-2 divide-border">
                         {/* Cantidad de frentes */}
                         <tr className="hover:bg-muted/30 transition-colors">
                           <td className="p-3">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-medium text-sm">Cantidad de frentes</span>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button className="text-muted-foreground hover:text-foreground transition-colors">
-                                    <Info className="w-3.5 h-3.5" />
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="text-xs">Rango observado: {FEATURE_RANGES[`${formData.tipologia}_${formData.tamanoTienda}`]?.frentes || 'N/A'}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
+                            <span className="font-medium text-sm">Cantidad de frentes</span>
                           </td>
                           <td className="p-3">
                             <Input
@@ -779,12 +835,12 @@ export function SimulationPersonalizada() {
                               value={formData.features.frentesPropios || ''}
                               onChange={(e) => {
                                 const value = e.target.value;
-                                setFormData({
+                                updateFormData({
                                   ...formData,
                                   features: { ...formData.features, frentesPropios: value === '' ? 0 : parseInt(value) }
                                 });
                               }}
-                              className="w-24 text-center mx-auto"
+                              className="w-24 text-center mx-auto bg-gray-50 dark:bg-input/30"
                               placeholder="0"
                             />
                           </td>
@@ -794,12 +850,12 @@ export function SimulationPersonalizada() {
                               value={formData.features.frentesCompetencia || ''}
                               onChange={(e) => {
                                 const value = e.target.value;
-                                setFormData({
+                                updateFormData({
                                   ...formData,
                                   features: { ...formData.features, frentesCompetencia: value === '' ? 0 : parseInt(value) }
                                 });
                               }}
-                              className="w-24 text-center mx-auto"
+                              className="w-24 text-center mx-auto bg-gray-50 dark:bg-input/30"
                               placeholder="0"
                             />
                           </td>
@@ -808,19 +864,7 @@ export function SimulationPersonalizada() {
                         {/* Cantidad de SKU's */}
                         <tr className="hover:bg-muted/30 transition-colors">
                           <td className="p-3">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-medium text-sm">Cantidad de SKU's</span>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button className="text-muted-foreground hover:text-foreground transition-colors">
-                                    <Info className="w-3.5 h-3.5" />
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="text-xs">Rango observado: {FEATURE_RANGES[`${formData.tipologia}_${formData.tamanoTienda}`]?.skus || 'N/A'}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
+                            <span className="font-medium text-sm">Cantidad de SKU's</span>
                           </td>
                           <td className="p-3">
                             <Input
@@ -828,12 +872,12 @@ export function SimulationPersonalizada() {
                               value={formData.features.skuPropios || ''}
                               onChange={(e) => {
                                 const value = e.target.value;
-                                setFormData({
+                                updateFormData({
                                   ...formData,
                                   features: { ...formData.features, skuPropios: value === '' ? 0 : parseInt(value) }
                                 });
                               }}
-                              className="w-24 text-center mx-auto"
+                              className="w-24 text-center mx-auto bg-gray-50 dark:bg-input/30"
                               placeholder="0"
                             />
                           </td>
@@ -843,12 +887,12 @@ export function SimulationPersonalizada() {
                               value={formData.features.skuCompetencia || ''}
                               onChange={(e) => {
                                 const value = e.target.value;
-                                setFormData({
+                                updateFormData({
                                   ...formData,
                                   features: { ...formData.features, skuCompetencia: value === '' ? 0 : parseInt(value) }
                                 });
                               }}
-                              className="w-24 text-center mx-auto"
+                              className="w-24 text-center mx-auto bg-gray-50 dark:bg-input/30"
                               placeholder="0"
                             />
                           </td>
@@ -858,19 +902,7 @@ export function SimulationPersonalizada() {
                         {formData.tipologia === 'Super e hiper' && (
                           <tr className="hover:bg-muted/30 transition-colors">
                             <td className="p-3">
-                              <div className="flex items-center space-x-2">
-                                <span className="font-medium text-sm">EDF's adicionales</span>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button className="text-muted-foreground hover:text-foreground transition-colors">
-                                      <Info className="w-3.5 h-3.5" />
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p className="text-xs">Rango observado: {FEATURE_RANGES[`${formData.tipologia}_${formData.tamanoTienda}`]?.equipos || 'N/A'}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
+                              <span className="font-medium text-sm">EDF's adicionales</span>
                             </td>
                             <td className="p-3">
                               <Input
@@ -878,12 +910,12 @@ export function SimulationPersonalizada() {
                                 value={formData.features.equiposFrioPropios || ''}
                                 onChange={(e) => {
                                   const value = e.target.value;
-                                  setFormData({
+                                  updateFormData({
                                     ...formData,
                                     features: { ...formData.features, equiposFrioPropios: value === '' ? 0 : parseInt(value) }
                                   });
                                 }}
-                                className="w-24 text-center mx-auto"
+                                className="w-24 text-center mx-auto bg-gray-50 dark:bg-input/30"
                                 placeholder="0"
                               />
                             </td>
@@ -893,12 +925,12 @@ export function SimulationPersonalizada() {
                                 value={formData.features.equiposFrioCompetencia || ''}
                                 onChange={(e) => {
                                   const value = e.target.value;
-                                  setFormData({
+                                  updateFormData({
                                     ...formData,
                                     features: { ...formData.features, equiposFrioCompetencia: value === '' ? 0 : parseInt(value) }
                                   });
                                 }}
-                                className="w-24 text-center mx-auto"
+                                className="w-24 text-center mx-auto bg-gray-50 dark:bg-input/30"
                                 placeholder="0"
                               />
                             </td>
@@ -908,19 +940,7 @@ export function SimulationPersonalizada() {
                         {/* Cantidad puertas COF */}
                         <tr className="hover:bg-muted/30 transition-colors">
                           <td className="p-3">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-medium text-sm">Cantidad puertas COF</span>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button className="text-muted-foreground hover:text-foreground transition-colors">
-                                    <Info className="w-3.5 h-3.5" />
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="text-xs">Rango observado: {FEATURE_RANGES[`${formData.tipologia}_${formData.tamanoTienda}`]?.puertas || 'N/A'}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
+                            <span className="font-medium text-sm">Cantidad puertas COF</span>
                           </td>
                           <td className="p-3">
                             <Input
@@ -928,12 +948,12 @@ export function SimulationPersonalizada() {
                               value={formData.features.puertasPropias || ''}
                               onChange={(e) => {
                                 const value = e.target.value;
-                                setFormData({
+                                updateFormData({
                                   ...formData,
                                   features: { ...formData.features, puertasPropias: value === '' ? 0 : parseInt(value) }
                                 });
                               }}
-                              className="w-24 text-center mx-auto"
+                              className="w-24 text-center mx-auto bg-gray-50 dark:bg-input/30"
                               placeholder="0"
                             />
                           </td>
@@ -943,12 +963,12 @@ export function SimulationPersonalizada() {
                               value={formData.features.puertasCompetencia || ''}
                               onChange={(e) => {
                                 const value = e.target.value;
-                                setFormData({
+                                updateFormData({
                                   ...formData,
                                   features: { ...formData.features, puertasCompetencia: value === '' ? 0 : parseInt(value) }
                                 });
                               }}
-                              className="w-24 text-center mx-auto"
+                              className="w-24 text-center mx-auto bg-gray-50 dark:bg-input/30"
                               placeholder="0"
                             />
                           </td>
@@ -963,93 +983,100 @@ export function SimulationPersonalizada() {
 
           {/* Paso 6: Parámetros Financieros */}
           {currentStep === 6 && (
-            <div className="animate-in fade-in duration-500">
-              <Card className="border-2 border-primary/20 w-full max-w-2xl">
+            <div className="animate-in fade-in duration-500 w-full max-w-4xl">
+              <Card className="border-2 border-primary/20">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <Wallet className="w-5 h-5 text-primary" />
                     <span>Parámetros financieros</span>
                   </CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Inversión y márgenes
-                  </p>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-6">
-                    {/* CAPEX and Fee in USD */}
-                    <div className="space-y-4 p-4 border border-border rounded-lg bg-muted/20">
-                      <h4 className="text-sm font-semibold mb-3">Inversión</h4>
-
-                      {loadingCapex ? (
-                        <div className="flex items-center justify-center py-4">
-                          <div className="text-sm text-muted-foreground">Cargando costos...</div>
+                  {loadingCapex ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="text-sm text-muted-foreground">Cargando costos...</div>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Inputs horizontales: CAPEX, Fee, TRM, MACO */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-xs text-muted-foreground mb-2 block">CAPEX (USD)</Label>
+                          <Input
+                            type="number"
+                            value={totalCapexUsd ? Math.round(totalCapexUsd) : ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setTotalCapexUsd(value === '' ? 0 : parseFloat(value));
+                            }}
+                            className="w-full bg-gray-50 dark:bg-input/30"
+                            placeholder="0"
+                            step="1"
+                            min="0"
+                          />
                         </div>
-                      ) : (
-                        <>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-xs text-muted-foreground mb-2 block">CAPEX (USD)</Label>
-                              <div className="text-lg font-semibold">
-                                ${totalCapexUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </div>
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground mb-2 block">Fee (USD)</Label>
-                              <div className="text-lg font-semibold">
-                                ${totalFeeUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </div>
-                            </div>
-                          </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground mb-2 block">Fee (USD)</Label>
+                          <Input
+                            type="number"
+                            value={totalFeeUsd ? Math.round(totalFeeUsd) : ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setTotalFeeUsd(value === '' ? 0 : parseFloat(value));
+                            }}
+                            className="w-full bg-gray-50 dark:bg-input/30"
+                            placeholder="0"
+                            step="1"
+                            min="0"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground mb-2 block">Tipo de Cambio (TRM)</Label>
+                          <Input
+                            type="text"
+                            value={formData.exchangeRate ? formData.exchangeRate.toLocaleString('es-CO') : ''}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\./g, '').replace(/,/g, '.');
+                              updateFormData({ ...formData, exchangeRate: value === '' ? 0 : parseFloat(value) });
+                            }}
+                            className="w-full bg-gray-50 dark:bg-input/30"
+                            placeholder="3.912"
+                            min="0"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground mb-2 block">MACO (%)</Label>
+                          <Input
+                            type="number"
+                            value={formData.maco}
+                            onChange={(e) => updateFormData({ ...formData, maco: parseFloat(e.target.value) || 0 })}
+                            className="w-full bg-gray-50 dark:bg-input/30"
+                            placeholder="35"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                          />
+                        </div>
+                      </div>
 
-                          <div className="border-t border-border pt-3 mt-3">
-                            <Label className="text-xs text-muted-foreground mb-2 block">Tipo de Cambio (TRM)</Label>
-                            <Input
-                              type="number"
-                              value={formData.exchangeRate || ''}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setFormData({ ...formData, exchangeRate: value === '' ? 0 : parseFloat(value) });
-                              }}
-                              className="w-full"
-                              placeholder="3912"
-                              step="0.01"
-                            />
-                          </div>
-
-                          <div className="border-t border-border pt-3 mt-3">
-                            <Label className="text-xs text-muted-foreground mb-2 block">Total en COP</Label>
+                      {/* Resumen de inversión total */}
+                      <div className="p-4 border-2 border-border rounded-lg bg-muted/40 dark:bg-muted/20">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label className="text-xs text-muted-foreground mb-1 block">Inversión Total</Label>
                             <div className="text-2xl font-bold text-primary">
                               ${((totalCapexUsd + totalFeeUsd) * formData.exchangeRate).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} COP
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              CAPEX: ${(totalCapexUsd * formData.exchangeRate).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} +
-                              Fee: ${(totalFeeUsd * formData.exchangeRate).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                            </p>
                           </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* MACO */}
-                    <div className="space-y-4 p-4 border border-border rounded-lg bg-muted/20">
-                      <div>
-                        <Label className="text-sm text-muted-foreground mb-2 block">MACO (%)</Label>
-                        <Input
-                          type="number"
-                          value={formData.maco}
-                          onChange={(e) => setFormData({ ...formData, maco: parseFloat(e.target.value) || 0 })}
-                          className="w-full"
-                          placeholder="35"
-                          min="0"
-                          max="100"
-                          step="0.1"
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Margen de contribución sobre ventas
-                        </p>
+                          <div className="text-right text-xs text-muted-foreground">
+                            <div>CAPEX: ${(totalCapexUsd * formData.exchangeRate).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+                            <div>Fee: ${(totalFeeUsd * formData.exchangeRate).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+                            <div className="mt-1 font-medium">MACO: {formData.maco}%</div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -1057,18 +1084,29 @@ export function SimulationPersonalizada() {
 
           {/* Paso 7: Resultados */}
           {currentStep === 7 && (
-            <div className="animate-in fade-in duration-500 w-full max-w-2xl">
+            <div className="animate-in fade-in duration-500 w-full max-w-6xl px-2">
               <Card className="border-2 border-primary/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2 text-lg">
-                    <TrendingUp className="w-5 h-5 text-primary" />
-                    <span>Resultados de la Simulación</span>
-                  </CardTitle>
+                <CardHeader className="p-3 sm:p-6">
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="flex items-center space-x-2 text-base sm:text-lg">
+                      <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                      <span className="truncate">Resultados de la Simulación</span>
+                    </CardTitle>
+                    <Button
+                      onClick={handleNewSimulation}
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs sm:text-sm shrink-0"
+                    >
+                      <span className="hidden sm:inline">Nueva Simulación</span>
+                      <span className="sm:hidden">Nueva</span>
+                    </Button>
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent className="space-y-4 p-3 sm:p-6">
                   {/* Error Message */}
                   {error && (
-                    <div className="flex items-start space-x-2 p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
+                    <div className="flex items-start space-x-2 p-4 bg-red-50 dark:bg-red-950/30 border-2 border-red-300 dark:border-red-700 rounded-lg">
                       <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
                       <div>
                         <p className="text-sm font-semibold text-red-800 dark:text-red-200">Error al calcular simulación</p>
@@ -1077,77 +1115,195 @@ export function SimulationPersonalizada() {
                     </div>
                   )}
 
-                  {/* Results - only show if no error and uplift > 0 */}
-                  {!error && results.uplift > 0 && (
+                  {/* Results - show if no error (including negative values) */}
+                  {!error && (results.uplift !== 0 || results.roi !== 0) && (
                     <>
-                      {/* Tabla de resultados compacta */}
-                      <div className="border border-border rounded-lg overflow-hidden">
-                        <table className="w-full">
-                          <thead className="bg-muted/50">
-                            <tr>
-                              <th className="text-left p-3 text-sm font-semibold">Métrica</th>
-                              <th className="text-center p-3 text-sm font-semibold">Valor</th>
-                              <th className="text-left p-3 text-sm font-semibold">Descripción</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border">
-                            <tr className="hover:bg-muted/30 transition-colors">
-                              <td className="p-3">
-                                <div className="flex items-center space-x-2">
-                                  <TrendingUp className="w-4 h-4 text-green-600" />
-                                  <span className="font-medium">Uplift</span>
+                      {/* Layout horizontal: Métricas (izquierda) + Configuración (derecha) */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 items-start lg:items-center">
+                        {/* Columna Izquierda: 3 tarjetas de métricas */}
+                        <div className="space-y-1.5 sm:space-y-2">
+                          {/* Uplift */}
+                          <div className={`p-3 sm:p-4 border-2 rounded-lg flex items-center justify-between ${
+                            results.uplift >= 0
+                              ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30'
+                              : 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30'
+                          }`}>
+                            <div className="flex items-center space-x-2 sm:space-x-3">
+                              <TrendingUp className={`w-4 h-4 sm:w-5 sm:h-5 ${
+                                results.uplift >= 0
+                                  ? 'text-green-600 dark:text-green-400'
+                                  : 'text-red-600 dark:text-red-400'
+                              }`} />
+                              <div>
+                                <p className={`text-xs sm:text-sm font-semibold mb-0.5 ${
+                                  results.uplift >= 0
+                                    ? 'text-green-700 dark:text-green-300'
+                                    : 'text-red-700 dark:text-red-300'
+                                }`}>Uplift</p>
+                                <p className="text-xs text-muted-foreground hidden sm:block">
+                                  {results.uplift >= 0 ? 'Incremento estimado en ventas' : 'Reducción estimada en ventas'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className={`text-lg sm:text-xl font-bold ${
+                              results.uplift >= 0
+                                ? 'text-green-600 dark:text-green-400'
+                                : 'text-red-600 dark:text-red-400'
+                            }`}>
+                              {results.uplift >= 0 ? '+' : ''}{results.uplift.toFixed(1)}%
+                            </div>
+                          </div>
+
+                          {/* ROI */}
+                          <div className={`p-3 sm:p-4 border-2 rounded-lg flex items-center justify-between ${
+                            results.roi >= 0
+                              ? 'border-primary/30 dark:border-primary/40 bg-primary/10 dark:bg-primary/5'
+                              : 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30'
+                          }`}>
+                            <div className="flex items-center space-x-2 sm:space-x-3">
+                              <DollarSign className={`w-4 h-4 sm:w-5 sm:h-5 ${
+                                results.roi >= 0
+                                  ? 'text-primary'
+                                  : 'text-red-600 dark:text-red-400'
+                              }`} />
+                              <div>
+                                <p className={`text-xs sm:text-sm font-semibold mb-0.5 ${
+                                  results.roi >= 0
+                                    ? 'text-primary'
+                                    : 'text-red-700 dark:text-red-300'
+                                }`}>ROI (12 meses)</p>
+                                <p className="text-xs text-muted-foreground hidden sm:block">Retorno sobre inversión anual</p>
+                              </div>
+                            </div>
+                            <div className={`text-lg sm:text-xl font-bold ${
+                              results.roi >= 0
+                                ? 'text-primary'
+                                : 'text-red-600 dark:text-red-400'
+                            }`}>
+                              {(results.roi * 100).toFixed(1)}%
+                            </div>
+                          </div>
+
+                          {/* Payback */}
+                          <div className={`p-3 sm:p-4 border-2 rounded-lg flex items-center justify-between ${
+                            results.payback > 0 && results.payback <= 12
+                              ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30'
+                              : 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30'
+                          }`}>
+                            <div className="flex items-center space-x-2 sm:space-x-3">
+                              <Calendar className={`w-4 h-4 sm:w-5 sm:h-5 ${
+                                results.payback > 0 && results.payback <= 12
+                                  ? 'text-green-600 dark:text-green-400'
+                                  : 'text-red-600 dark:text-red-400'
+                              }`} />
+                              <div>
+                                <p className={`text-xs sm:text-sm font-semibold mb-0.5 ${
+                                  results.payback > 0 && results.payback <= 12
+                                    ? 'text-green-700 dark:text-green-300'
+                                    : 'text-red-700 dark:text-red-300'
+                                }`}>
+                                  Payback
+                                </p>
+                                <p className="text-xs text-muted-foreground hidden sm:block">Estado de repago mensual</p>
+                              </div>
+                            </div>
+                            <div className={`text-lg sm:text-xl font-bold ${
+                              results.payback > 0 && results.payback <= 12
+                                ? 'text-green-600 dark:text-green-400'
+                                : 'text-red-600 dark:text-red-400'
+                            }`}>
+                              {results.payback > 0 && results.payback <= 12 ? 'Repaga' : 'No Repaga'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Columna Derecha: Resumen de Configuración completa */}
+                        <div className="border-2 border-border rounded-lg overflow-hidden h-fit">
+                          <div className="bg-muted/70 dark:bg-muted/50 px-2 sm:px-3 py-1.5 sm:py-2 border-b-2 border-border">
+                            <h4 className="text-xs sm:text-sm font-semibold flex items-center space-x-2">
+                              <Brain className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
+                              <span>Configuración de la Simulación</span>
+                            </h4>
+                          </div>
+                          <div className="p-2 sm:p-3 space-y-1.5 sm:space-y-2">
+                            {/* Row 1: Tipología, Tipo, Tamaño, Palancas */}
+                            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-0.5">Tipología</p>
+                                <p className="text-xs sm:text-sm font-medium">{formData.tipologia}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-0.5">Tipo</p>
+                                <p className="text-xs sm:text-sm font-medium">{formData.tipoPalanca === 'simple' ? 'Simple' : 'Múltiple'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-0.5">Tamaño</p>
+                                <p className="text-xs sm:text-sm font-medium">{formData.tamanoTienda}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-0.5">Palancas</p>
+                                <div className="flex flex-wrap gap-0.5 sm:gap-1">
+                                  {formData.palancasSeleccionadas.map((palanca, idx) => (
+                                    <Badge key={idx} variant="secondary" className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.5">
+                                      {palanca}
+                                    </Badge>
+                                  ))}
                                 </div>
-                              </td>
-                              <td className="p-3 text-center">
-                                <span className="text-lg font-bold text-green-600">+{results.uplift.toFixed(1)}%</span>
-                              </td>
-                              <td className="p-3 text-sm text-muted-foreground">
-                                Incremento estimado en ventas
-                              </td>
-                            </tr>
-                            <tr className="hover:bg-muted/30 transition-colors">
-                              <td className="p-3">
-                                <div className="flex items-center space-x-2">
-                                  <DollarSign className="w-4 h-4 text-primary" />
-                                  <span className="font-medium">ROI (12 meses)</span>
+                              </div>
+                            </div>
+
+                            {/* Row 3: Features */}
+                            <div className="border-t-2 border-border pt-1.5 sm:pt-2">
+                              <p className="text-xs text-muted-foreground mb-1">Features</p>
+                              <div className="grid grid-cols-2 gap-1.5 sm:gap-2 text-[10px] sm:text-xs">
+                                <div>
+                                  <span className="text-muted-foreground">Frentes:</span>{' '}
+                                  <span className="font-medium">{formData.features.frentesPropios} vs {formData.features.frentesCompetencia}</span>
                                 </div>
-                              </td>
-                              <td className="p-3 text-center">
-                                <span className="text-lg font-bold text-primary">{(results.roi * 100).toFixed(1)}%</span>
-                              </td>
-                              <td className="p-3 text-sm text-muted-foreground">
-                                Retorno sobre inversión anual
-                              </td>
-                            </tr>
-                            <tr className="hover:bg-muted/30 transition-colors">
-                              <td className="p-3">
-                                <div className="flex items-center space-x-2">
-                                  <Calendar className="w-4 h-4 text-orange-600" />
-                                  <span className="font-medium">Payback</span>
+                                <div>
+                                  <span className="text-muted-foreground">SKUs:</span>{' '}
+                                  <span className="font-medium">{formData.features.skuPropios} vs {formData.features.skuCompetencia}</span>
                                 </div>
-                              </td>
-                              <td className="p-3 text-center">
-                                <span className="text-lg font-bold text-orange-600">
-                                  {results.payback > 0 ? `${results.payback.toFixed(1)} meses` : 'N/A'}
-                                </span>
-                              </td>
-                              <td className="p-3 text-sm text-muted-foreground">
-                                Meses para recuperar inversión
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
+                                {formData.tipologia === 'Super e hiper' && (
+                                  <div>
+                                    <span className="text-muted-foreground">EDFs:</span>{' '}
+                                    <span className="font-medium">{formData.features.equiposFrioPropios} vs {formData.features.equiposFrioCompetencia}</span>
+                                  </div>
+                                )}
+                                <div>
+                                  <span className="text-muted-foreground">Puertas:</span>{' '}
+                                  <span className="font-medium">{formData.features.puertasPropias} vs {formData.features.puertasCompetencia}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Row 4: Parámetros Financieros */}
+                            <div className="border-t-2 border-border pt-1.5 sm:pt-2">
+                              <p className="text-xs text-muted-foreground mb-1">Financieros</p>
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-[10px] sm:text-xs">
+                                  <span className="text-muted-foreground">Inversión Total</span>
+                                  <span className="font-bold text-primary">
+                                    ${((totalCapexUsd + totalFeeUsd) * formData.exchangeRate).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} COP
+                                  </span>
+                                </div>
+                                <div className="text-[10px] sm:text-xs flex items-center justify-between">
+                                  <div className="flex items-center gap-2 sm:gap-3">
+                                    <span className="text-muted-foreground">CAPEX: <span className="font-medium text-foreground">${Math.round(totalCapexUsd).toLocaleString('es-CO')}</span></span>
+                                    <span className="text-muted-foreground">Fee: <span className="font-medium text-foreground">${Math.round(totalFeeUsd).toLocaleString('es-CO')}</span></span>
+                                  </div>
+                                  <div className="flex items-center gap-2 sm:gap-3">
+                                    <span className="text-muted-foreground">TRM: <span className="font-medium text-foreground">${formData.exchangeRate.toLocaleString('es-CO')}</span></span>
+                                    <span className="text-muted-foreground">MACO: <span className="font-medium text-foreground">{formData.maco}%</span></span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </>
                   )}
-
-                  {/* Nueva Simulación button */}
-                  <Button
-                    onClick={handleNewSimulation}
-                    className="w-full"
-                  >
-                    Nueva Simulación
-                  </Button>
                 </CardContent>
               </Card>
             </div>
@@ -1197,12 +1353,13 @@ export function SimulationPersonalizada() {
 
       {/* Navigation buttons */}
       {currentStep < 7 && !isCalculating && (
-        <div className="border-t border-border p-4 bg-card">
+        <div className="border-t-2 border-border p-4 bg-card">
           <div className="flex items-center justify-between max-w-3xl mx-auto">
             <Button
               variant="outline"
               onClick={handleBack}
               disabled={currentStep === 1}
+              className="border-2"
             >
               <ChevronLeft className="w-4 h-4 mr-1" />
               Anterior
@@ -1211,7 +1368,7 @@ export function SimulationPersonalizada() {
             <Button
               onClick={handleNext}
               disabled={!canContinue()}
-              className="bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90 shadow-md hover:shadow-lg transition-shadow"
             >
               {currentStep === 6 ? 'Simular' : 'Continuar'}
               {currentStep !== 6 && <ChevronRight className="w-4 h-4 ml-1" />}

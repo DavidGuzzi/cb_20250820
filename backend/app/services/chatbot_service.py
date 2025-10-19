@@ -219,23 +219,22 @@ class ChatbotService:
         }
     
     def get_data_summary(self) -> dict:
-        """Get summary of available data"""
-        # Use existing chatbot to get data summary
-        temp_chatbot = ABTestingChatbot()
-        
-        return {
-            'success': True,
-            'data_summary': {
-                'tables': ['pdvs', 'ventas', 'vista_completa'],
-                'columns': {
-                    'pdvs': 'pdv_codigo, nombre, ciudad, region, tipo',
-                    'ventas': 'pdv_codigo, mes, revenue, visitantes, conversiones, tasa_conversion, revenue_por_visitante',
-                    'vista_completa': 'Combinación de ambas tablas'
-                },
-                'sample_data': {},
-                'stats': temp_chatbot.data_store.get_summary_stats()
+        """Get summary of available data from PostgreSQL"""
+        from app.services.unified_database_service import unified_db
+
+        # Get summary directly from PostgreSQL
+        result = unified_db.get_data_summary()
+
+        if result.get('success'):
+            return {
+                'success': True,
+                'data_summary': result.get('summary', {})
             }
-        }
+        else:
+            return {
+                'success': False,
+                'error': result.get('error', 'Failed to get data summary')
+            }
 
 # Global chatbot service instance
 chatbot_service = ChatbotService()

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
+import { Card } from './ui/card';
 import {
   Send,
   Bot,
@@ -247,14 +248,15 @@ export function Results({ userEmail, onBackToDashboard, onLogout }: ResultsProps
       </header>
 
       {/* Main Content */}
-      <main className="flex h-[calc(100vh-65px-48px)]">
+      <main className="flex h-[calc(100vh-65px-48px)] gap-6 p-6">
         {/* Panel izquierdo - Simulaciones */}
-        <div className="flex-1 p-6 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto">
           <SimulationVisualization />
         </div>
 
         {/* Panel derecho - Chatbot integrado */}
-        <div className="w-[35%] min-w-[450px] max-w-[35%] bg-card border-l border-border flex flex-col" data-chat-area>
+        <div className="w-[35%] min-w-[450px] max-w-[35%]" data-chat-area>
+          <Card className="h-full bg-card shadow-sm flex flex-col">
           <div className="p-4 border-b border-border">
             <div className="flex items-center space-x-2">
               <div className="relative">
@@ -273,7 +275,7 @@ export function Results({ userEmail, onBackToDashboard, onLogout }: ResultsProps
           </div>
 
           {/* Chat messages area */}
-          <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-hidden" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+          <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-hidden">
             <div className="p-4 space-y-4 min-h-full overflow-hidden">
               {messages.map((message) => (
                 <div 
@@ -446,6 +448,7 @@ export function Results({ userEmail, onBackToDashboard, onLogout }: ResultsProps
               </Button>
             </div>
           </div>
+          </Card>
         </div>
       </main>
 

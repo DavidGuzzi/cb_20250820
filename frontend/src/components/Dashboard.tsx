@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import { Button } from './ui/button';
 import { Sun, Moon, BarChart3, MessageSquare, LogOut } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
+import { useAppState } from '../contexts/AppStateContext';
 import { SummaryCards } from './SummaryCards';
 import { FilterPanel } from './FilterPanel';
 import { ResultsVisualization } from './ResultsVisualization';
@@ -19,13 +19,8 @@ interface DashboardProps {
 
 export function Dashboard({ userEmail, onNavigateToResults, onLogout }: DashboardProps) {
   const { theme, toggleTheme } = useTheme();
-  const [filters, setFilters] = useState({
-    tipologia: 'Super e hiper', // Default tipologia
-    palanca: '', // Sin palanca seleccionada por defecto
-    fuente: 'all', // Default fuente (all = sin filtro)
-    unidad: 'all', // Default unidad (all = sin filtro)
-    categoria: 'all' // Default categoria (all = sin filtro)
-  });
+  const { dashboardState, setDashboardFilters } = useAppState();
+  const filters = dashboardState.filters;
 
   return (
     <div className="min-h-screen bg-background">
@@ -88,7 +83,7 @@ export function Dashboard({ userEmail, onNavigateToResults, onLogout }: Dashboar
           </div>
 
           <div>
-            <FilterPanel filters={filters} onFiltersChange={setFilters} />
+            <FilterPanel filters={filters} onFiltersChange={setDashboardFilters} />
           </div>
         </div>
 

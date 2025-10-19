@@ -1,10 +1,11 @@
-import { useState } from 'react';
 import { Card, CardContent, CardHeader } from './ui/card';
+import { useAppState } from '../contexts/AppStateContext';
 import { SimulationPersonalizada } from './SimulationPersonalizada';
 import { SimulationEstudio } from './SimulationEstudio';
 
 export function SimulationVisualization() {
-  const [viewMode, setViewMode] = useState<'personalizada' | 'estudio'>('personalizada');
+  const { analysisState, setAnalysisViewMode } = useAppState();
+  const viewMode = analysisState.viewMode;
 
   return (
     <div className="h-full">
@@ -18,7 +19,7 @@ export function SimulationVisualization() {
 
             <div className="inline-flex items-center bg-muted rounded-lg p-0.5">
               <button
-                onClick={() => setViewMode('personalizada')}
+                onClick={() => setAnalysisViewMode('personalizada')}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
                   viewMode === 'personalizada'
                     ? 'bg-white dark:bg-background text-foreground shadow-sm'
@@ -28,7 +29,7 @@ export function SimulationVisualization() {
                 Personalizada
               </button>
               <button
-                onClick={() => setViewMode('estudio')}
+                onClick={() => setAnalysisViewMode('estudio')}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
                   viewMode === 'estudio'
                     ? 'bg-white dark:bg-background text-foreground shadow-sm'

@@ -4,11 +4,11 @@ import { Dashboard } from './components/Dashboard';
 import { Results } from './components/ResultsV2';
 import { ChatProvider } from './contexts/ChatContext';
 import { ThemeProvider } from './components/ThemeProvider';
+import { AppStateProvider, useAppState } from './contexts/AppStateContext';
 
-type AppState = 'login' | 'dashboard' | 'results';
-
-export default function App() {
-  const [currentView, setCurrentView] = useState<AppState>('login');
+// Wrap the main app logic to use AppStateContext
+function AppContent() {
+  const { currentView, setCurrentView, resetAllState } = useAppState();
   const [userEmail, setUserEmail] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
@@ -29,10 +29,13 @@ export default function App() {
     // Clean theme classes from DOM when logging out
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark');
-    
+
     // Clear theme preference from localStorage
     localStorage.removeItem('theme');
-    
+
+    // Reset all app state
+    resetAllState();
+
     setUserEmail('');
     setCurrentView('login');
   };
@@ -51,7 +54,7 @@ export default function App() {
     <ThemeProvider>
       <ChatProvider userEmail={userEmail} onError={handleError}>
         {currentView === 'dashboard' && (
-          <Dashboard 
+          <Dashboard
             userEmail={userEmail}
             onNavigateToResults={handleNavigateToResults}
             onLogout={handleLogout}
@@ -74,5 +77,14 @@ export default function App() {
         )}
       </ChatProvider>
     </ThemeProvider>
+  );
+}
+
+// Main App component with AppStateProvider wrapper
+export default function App() {
+  return (
+    <AppStateProvider>
+      <AppContent />
+    </AppStateProvider>
   );
 }

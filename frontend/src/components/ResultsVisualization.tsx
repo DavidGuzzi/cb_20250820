@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { Card, CardContent, CardHeader } from './ui/card';
+import { useAppState } from '../contexts/AppStateContext';
 import { ExperimentTable } from './ExperimentTable';
 import { RadarChartContainer } from './RadarChartContainer';
 import { CompetitionTable } from './CompetitionTable';
@@ -8,7 +8,6 @@ interface ResultsVisualizationProps {
   filters: {
     tipologia: string;
     palanca: string;
-    kpi: string;
     fuente: string;
     unidad: string;
     categoria: string;
@@ -16,7 +15,8 @@ interface ResultsVisualizationProps {
 }
 
 export function ResultsVisualization({ filters }: ResultsVisualizationProps) {
-  const [viewMode, setViewMode] = useState<'table' | 'radar' | 'competition'>('table');
+  const { dashboardState, setDashboardViewMode } = useAppState();
+  const viewMode = dashboardState.resultsViewMode;
 
   // Color mapping for tipologías (matching radar chart colors)
   const TIPOLOGIA_COLORS: Record<string, string> = {
@@ -38,7 +38,7 @@ export function ResultsVisualization({ filters }: ResultsVisualizationProps) {
             <div className="flex items-center gap-4">
               <div className="inline-flex items-center bg-muted rounded-lg p-0.5">
                 <button
-                  onClick={() => setViewMode('table')}
+                  onClick={() => setDashboardViewMode('table')}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
                     viewMode === 'table'
                       ? 'bg-orange-500 text-white shadow-sm'
@@ -48,7 +48,7 @@ export function ResultsVisualization({ filters }: ResultsVisualizationProps) {
                   Cuadro
                 </button>
                 <button
-                  onClick={() => setViewMode('radar')}
+                  onClick={() => setDashboardViewMode('radar')}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
                     viewMode === 'radar'
                       ? 'bg-orange-500 text-white shadow-sm'
@@ -75,7 +75,7 @@ export function ResultsVisualization({ filters }: ResultsVisualizationProps) {
 
             {/* Right side: Competition button */}
             <button
-              onClick={() => setViewMode('competition')}
+              onClick={() => setDashboardViewMode('competition')}
               className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
                 viewMode === 'competition'
                   ? 'bg-red-600 text-white shadow-sm'
